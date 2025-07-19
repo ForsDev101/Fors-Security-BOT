@@ -4,7 +4,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 
 // ============ CONFIG ============
-const TOKEN = process.env.DISCORD_TOKEN;
+const TOKEN = process.env.TOKEN;
 const OWNER_ID = process.env.OWNER_ID;
 const PANEL_PASSWORD = process.env.PANEL_PASSWORD || '1234';
 
