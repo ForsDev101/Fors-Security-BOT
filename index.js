@@ -76,7 +76,7 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-client.login(TOKEN);
+client.login(process.env.TOKEN);
 
 // Web sunucusunu başlat
 app.listen(PORT, () => {
