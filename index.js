@@ -1,157 +1,132 @@
-// index.js
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials, AuditLogEvent } = require("discord.js");
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const express = require("express");
 const fs = require("fs");
-const app = express();
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildBans,
-    GatewayIntentBits.GuildEmojisAndStickers,
-    GatewayIntentBits.GuildIntegrations,
-    GatewayIntentBits.GuildWebhooks,
-    GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions
-  ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildBans, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildIntegrations, GatewayIntentBits.GuildWebhooks, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildVoiceStates],
+  partials: [Partials.Channel]
 });
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
-const TOKEN = process.env.DISCORD_TOKEN;
-const GUILD_ID = process.env.GUILD_ID;
-const OWNER_ID = process.env.OWNER_ID;
-const PASSWORD = process.env.PANEL_PASSWORD;
+const TOKEN = process.env.TOKEN;
+const AUTH_COOKIE = process.env.AUTH_COOKIE;
+const PASSWORD = "forsauth"; // Panel şifresi
 
-let whitelist = [OWNER_ID];
-let bans = [];
+let whitelist = [];
+let banList = [];
 let logs = [];
-let userActions = {};
+const actions = new Map();
 
-const LIMIT = 3;
-const TIME = 30 * 60 * 1000; // 30 dakika
+// Koruma olaylarını takip et
+const protectionEvents = {
+  CHANNEL_DELETE: "channelDelete",
+  ROLE_DELETE: "roleDelete",
+  GUILD_BAN_ADD: "guildBanAdd",
+  GUILD_MEMBER_REMOVE: "guildMemberRemove",
+  BOT_ADD: "guildMemberAdd",
+};
 
-function isWhitelisted(userId) {
-  return whitelist.includes(userId);
-}
-
-function logAction(userId, action, target) {
-  logs.push({ userId, action, target, time: new Date() });
-}
-
-function track(userId, action) {
-  if (!userActions[userId]) userActions[userId] = [];
-  userActions[userId].push({ action, time: Date.now() });
-  userActions[userId] = userActions[userId].filter(a => Date.now() - a.time <= TIME);
-  const actionCount = userActions[userId].filter(a => a.action === action).length;
-  if (actionCount >= LIMIT) return true;
-  return false;
-}
-
-async function banUser(userId, reason) {
-  const guild = client.guilds.cache.get(GUILD_ID);
-  const member = guild.members.cache.get(userId);
-  if (!member || isWhitelisted(userId)) return;
-
-  await member.ban({ reason: `Abuse: ${reason}` });
-  bans.push({ id: userId, reason });
-  logAction(userId, "ban", reason);
-
+// Banlama fonksiyonu
+async function punish(member, reason) {
   try {
-    await member.send({ embeds: [{
-      title: "Forslandın",
-      description: "Sunucuda kötüye kullanım tespit edildi.",
-      color: 0xff0000
-    }] });
-  } catch (e) {}
+    await member.ban({ reason });
+    await member.send("Forslandın").catch(() => {});
+    banList.push({ id: member.id, reason, time: Date.now() });
+    logs.push({ user: member.id, action: reason, time: new Date() });
+  } catch (err) {
+    console.log("Ban error:", err.message);
+  }
 }
 
-client.on("ready", () => {
-  console.log(`Bot ${client.user.tag} olarak giriş yaptı.`);
+// Kullanıcıyı takip et
+function trackUser(userId, type) {
+  const now = Date.now();
+  if (!actions.has(userId)) actions.set(userId, []);
+  actions.get(userId).push({ type, time: now });
+
+  const userActions = actions.get(userId).filter(e => now - e.time < 1800000);
+  const sameType = userActions.filter(e => e.type === type);
+
+  if (sameType.length >= 3 && !whitelist.includes(userId)) {
+    const guild = client.guilds.cache.first();
+    const member = guild.members.cache.get(userId);
+    if (member) punish(member, `${type} abuse`);
+  }
+}
+
+// Discord olaylarını dinle
+client.on("channelDelete", channel => {
+  if (channel.guild) trackUser(channel.lastDeletedBy?.id || "unknown", "CHANNEL_DELETE");
 });
 
-client.on("channelDelete", async (channel) => {
-  const logs = await channel.guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete, limit: 1 });
-  const entry = logs.entries.first();
-  if (!entry) return;
-  const { executor } = entry;
-  if (track(executor.id, "channelDelete")) banUser(executor.id, "Kanal silme abuse");
+client.on("roleDelete", role => {
+  if (role.guild) trackUser(role.lastDeletedBy?.id || "unknown", "ROLE_DELETE");
 });
 
-client.on("roleDelete", async (role) => {
-  const logs = await role.guild.fetchAuditLogs({ type: AuditLogEvent.RoleDelete, limit: 1 });
-  const entry = logs.entries.first();
-  if (!entry) return;
-  const { executor } = entry;
-  if (track(executor.id, "roleDelete")) banUser(executor.id, "Rol silme abuse");
+client.on("guildBanAdd", (ban) => {
+  trackUser(ban.executor?.id || "unknown", "GUILD_BAN_ADD");
 });
 
-client.on("guildBanAdd", async (ban) => {
-  const logs = await ban.guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 1 });
-  const entry = logs.entries.first();
-  if (!entry) return;
-  const { executor } = entry;
-  if (track(executor.id, "ban")) banUser(executor.id, "Ban abuse");
+client.on("guildMemberRemove", (member) => {
+  trackUser(member.kickedBy?.id || "unknown", "GUILD_MEMBER_REMOVE");
 });
 
-client.on("guildMemberRemove", async (member) => {
-  const logs = await member.guild.fetchAuditLogs({ type: AuditLogEvent.MemberKick, limit: 1 });
-  const entry = logs.entries.first();
-  if (!entry) return;
-  const { executor } = entry;
-  if (track(executor.id, "kick")) banUser(executor.id, "Kick abuse");
-});
-
-client.on("guildMemberAdd", async (member) => {
+client.on("guildMemberAdd", (member) => {
   if (member.user.bot) {
-    const logs = await member.guild.fetchAuditLogs({ type: AuditLogEvent.BotAdd, limit: 1 });
-    const entry = logs.entries.first();
-    if (!entry) return;
-    const { executor } = entry;
-    banUser(executor.id, "Bot ekleme");
-    try { await member.ban({ reason: "Bot eklendiği için otomatik ban" }); } catch {}
+    trackUser(member.executor?.id || "unknown", "BOT_ADD");
   }
 });
 
-// WEB PANEL
-app.use(express.urlencoded({ extended: true }));
-
+// Web Panel
 app.get("/", (req, res) => {
-  res.send(`<form method='POST' action='/login'><input type='password' name='pw'/><button>Giriş</button></form>`);
-});
-
-app.post("/login", (req, res) => {
-  const { pw } = req.body;
-  if (pw !== PASSWORD) return res.send("Hatalı şifre.");
+  if (req.headers.cookie !== `auth=${AUTH_COOKIE}`) return res.send('<form method="POST"><input name="password"><button>Giriş</button></form>');
   res.send(`
-    <h1>Banlılar</h1>
-    ${bans.map(b => `<div>${b.id} - ${b.reason} <form method='POST' action='/unban'><input type='hidden' name='id' value='${b.id}'/><button>Unban</button></form></div>`).join("")}
-    <h2>Whitelist</h2>
-    ${whitelist.map(w => `<div>${w}</div>`).join("")}
-    <form method='POST' action='/addwhitelist'><input name='id'/><button>Whitelist Ekle</button></form>
-    <h2>Loglar</h2>
-    <pre>${logs.map(l => `${l.userId} - ${l.action} - ${l.target}`).join("\n")}</pre>
+    <h2>Fors Guard Panel</h2>
+    <h3>Banlılar</h3><pre>${JSON.stringify(banList, null, 2)}</pre>
+    <h3>Whitelist</h3><pre>${JSON.stringify(whitelist, null, 2)}</pre>
+    <h3>Loglar</h3><pre>${JSON.stringify(logs, null, 2)}</pre>
+    <form method="POST" action="/unban"><input name="id" placeholder="ID"><button>Ban Kaldır</button></form>
+    <form method="POST" action="/whitelist"><input name="id" placeholder="ID"><button>Whitelist Ekle</button></form>
   `);
 });
 
-app.post("/unban", async (req, res) => {
-  const { id } = req.body;
-  const guild = client.guilds.cache.get(GUILD_ID);
-  await guild.members.unban(id).catch(() => {});
-  bans = bans.filter(b => b.id !== id);
-  res.redirect("/");
+app.post("/", (req, res) => {
+  if (req.body.password === PASSWORD) {
+    res.setHeader("Set-Cookie", `auth=${AUTH_COOKIE}`);
+    return res.redirect("/");
+  }
+  res.send("Hatalı şifre.");
 });
 
-app.post("/addwhitelist", (req, res) => {
-  const { id } = req.body;
+app.post("/unban", async (req, res) => {
+  const id = req.body.id;
+  try {
+    const guild = client.guilds.cache.first();
+    await guild.members.unban(id);
+    banList = banList.filter(u => u.id !== id);
+    res.redirect("/");
+  } catch {
+    res.send("Ban kaldırma başarısız.");
+  }
+});
+
+app.post("/whitelist", (req, res) => {
+  const id = req.body.id;
   if (!whitelist.includes(id)) whitelist.push(id);
   res.redirect("/");
 });
 
+// Başlat
+client.once("ready", () => {
+  console.log(`${client.user.tag} aktif!`);
+});
 client.login(TOKEN);
-app.listen(PORT, () => console.log(`Web panel aktif: ${PORT}`));
+
+app.listen(PORT, () => {
+  console.log(`Web panel ${PORT} portunda çalışıyor.`);
+});
