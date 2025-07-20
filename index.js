@@ -1,132 +1,158 @@
+// index.js
 require("dotenv").config();
-const { Client, GatewayIntentBits, Partials } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, EmbedBuilder } = require("discord.js");
 const express = require("express");
+const app = express();
 const fs = require("fs");
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildBans, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildIntegrations, GatewayIntentBits.GuildWebhooks, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildBans,
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildIntegrations,
+  ],
   partials: [Partials.Channel]
 });
 
-const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.TOKEN;
+const PORT = process.env.PORT || 3000;
 const AUTH_COOKIE = process.env.AUTH_COOKIE;
-const PASSWORD = "forsauth"; // Panel şifresi
+const OWNER_ID = process.env.OWNER_ID;
 
 let whitelist = [];
-let banList = [];
-let logs = [];
-const actions = new Map();
+let actionLog = [];
+let bans = {};
 
-// Koruma olaylarını takip et
-const protectionEvents = {
-  CHANNEL_DELETE: "channelDelete",
-  ROLE_DELETE: "roleDelete",
-  GUILD_BAN_ADD: "guildBanAdd",
-  GUILD_MEMBER_REMOVE: "guildMemberRemove",
-  BOT_ADD: "guildMemberAdd",
-};
+const actionHistory = {}; // userId: { type: [timestamps] }
+const LIMIT = 3;
+const TIME_FRAME = 1000 * 60 * 30; // 30 dakika
 
-// Banlama fonksiyonu
-async function punish(member, reason) {
-  try {
-    await member.ban({ reason });
-    await member.send("Forslandın").catch(() => {});
-    banList.push({ id: member.id, reason, time: Date.now() });
-    logs.push({ user: member.id, action: reason, time: new Date() });
-  } catch (err) {
-    console.log("Ban error:", err.message);
-  }
-}
-
-// Kullanıcıyı takip et
-function trackUser(userId, type) {
+function shouldBan(userId, type) {
+  if (whitelist.includes(userId)) return false;
   const now = Date.now();
-  if (!actions.has(userId)) actions.set(userId, []);
-  actions.get(userId).push({ type, time: now });
-
-  const userActions = actions.get(userId).filter(e => now - e.time < 1800000);
-  const sameType = userActions.filter(e => e.type === type);
-
-  if (sameType.length >= 3 && !whitelist.includes(userId)) {
-    const guild = client.guilds.cache.first();
-    const member = guild.members.cache.get(userId);
-    if (member) punish(member, `${type} abuse`);
-  }
+  if (!actionHistory[userId]) actionHistory[userId] = {};
+  if (!actionHistory[userId][type]) actionHistory[userId][type] = [];
+  actionHistory[userId][type] = actionHistory[userId][type].filter(ts => now - ts < TIME_FRAME);
+  actionHistory[userId][type].push(now);
+  return actionHistory[userId][type].length >= LIMIT;
 }
 
-// Discord olaylarını dinle
+function banUser(guild, userId, reason) {
+  const member = guild.members.cache.get(userId);
+  if (!member) return;
+  if (whitelist.includes(userId)) return;
+  member.ban({ reason }).catch(() => {});
+  const embed = new EmbedBuilder()
+    .setTitle("Fors Koruması")
+    .setDescription("Forslandın")
+    .setColor("Red")
+    .setFooter({ text: "TKT forsun koruması altındadır" });
+  member.send({ embeds: [embed] }).catch(() => {});
+  bans[userId] = { id: userId, tag: member.user.tag, reason, timestamp: Date.now() };
+  actionLog.push({ userId, tag: member.user.tag, action: reason, time: new Date() });
+}
+
+client.on("guildMemberAdd", member => {
+  if (member.user.bot) {
+    const entry = member.guild.fetchAuditLogs({ type: 28 }).then(logs => {
+      const executor = logs.entries.first()?.executor;
+      if (executor && shouldBan(executor.id, "botAdd")) banUser(member.guild, executor.id, "Bot ekleme");
+    });
+  }
+});
+
 client.on("channelDelete", channel => {
-  if (channel.guild) trackUser(channel.lastDeletedBy?.id || "unknown", "CHANNEL_DELETE");
+  channel.guild.fetchAuditLogs({ type: 12 }).then(logs => {
+    const executor = logs.entries.first()?.executor;
+    if (executor && shouldBan(executor.id, "channelDelete")) banUser(channel.guild, executor.id, "Kanal silme");
+  });
 });
 
 client.on("roleDelete", role => {
-  if (role.guild) trackUser(role.lastDeletedBy?.id || "unknown", "ROLE_DELETE");
+  role.guild.fetchAuditLogs({ type: 32 }).then(logs => {
+    const executor = logs.entries.first()?.executor;
+    if (executor && shouldBan(executor.id, "roleDelete")) banUser(role.guild, executor.id, "Rol silme");
+  });
 });
 
 client.on("guildBanAdd", (ban) => {
-  trackUser(ban.executor?.id || "unknown", "GUILD_BAN_ADD");
+  ban.guild.fetchAuditLogs({ type: 22 }).then(logs => {
+    const executor = logs.entries.first()?.executor;
+    if (executor && shouldBan(executor.id, "memberBan")) banUser(ban.guild, executor.id, "Üye banlama");
+  });
 });
 
-client.on("guildMemberRemove", (member) => {
-  trackUser(member.kickedBy?.id || "unknown", "GUILD_MEMBER_REMOVE");
+client.on("guildMemberRemove", member => {
+  member.guild.fetchAuditLogs({ type: 20 }).then(logs => {
+    const executor = logs.entries.first()?.executor;
+    if (executor && shouldBan(executor.id, "memberKick")) banUser(member.guild, executor.id, "Üye kickleme");
+  });
 });
 
-client.on("guildMemberAdd", (member) => {
-  if (member.user.bot) {
-    trackUser(member.executor?.id || "unknown", "BOT_ADD");
+client.on("messageCreate", msg => {
+  if (!msg.content.startsWith("!Tamkontrol") || msg.author.id !== OWNER_ID) return;
+  const target = msg.mentions.users.first();
+  if (!target) return msg.reply("Kullanıcı etiketle.");
+  if (whitelist.includes(target.id)) {
+    whitelist = whitelist.filter(id => id !== target.id);
+    msg.reply(`${target.tag} artık korunmuyor.`);
+  } else {
+    whitelist.push(target.id);
+    msg.reply(`${target.tag} artık korumalı.`);
   }
 });
 
-// Web Panel
+// Web panel
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+app.use((req, res, next) => {
+  if (req.headers["auth"] !== AUTH_COOKIE) return res.status(401).send("Yetkisiz");
+  next();
+});
+
 app.get("/", (req, res) => {
-  if (req.headers.cookie !== `auth=${AUTH_COOKIE}`) return res.send('<form method="POST"><input name="password"><button>Giriş</button></form>');
-  res.send(`
-    <h2>Fors Guard Panel</h2>
-    <h3>Banlılar</h3><pre>${JSON.stringify(banList, null, 2)}</pre>
-    <h3>Whitelist</h3><pre>${JSON.stringify(whitelist, null, 2)}</pre>
-    <h3>Loglar</h3><pre>${JSON.stringify(logs, null, 2)}</pre>
-    <form method="POST" action="/unban"><input name="id" placeholder="ID"><button>Ban Kaldır</button></form>
-    <form method="POST" action="/whitelist"><input name="id" placeholder="ID"><button>Whitelist Ekle</button></form>
-  `);
+  res.send(`<h1>Fors Koruma Paneli</h1>
+  <ul>
+    <li><a href='/bans'>Banlılar</a></li>
+    <li><a href='/whitelist'>Whitelist</a></li>
+    <li><a href='/logs'>Loglar</a></li>
+  </ul>`);
 });
 
-app.post("/", (req, res) => {
-  if (req.body.password === PASSWORD) {
-    res.setHeader("Set-Cookie", `auth=${AUTH_COOKIE}`);
-    return res.redirect("/");
-  }
-  res.send("Hatalı şifre.");
+app.get("/bans", (req, res) => {
+  res.json(bans);
 });
 
-app.post("/unban", async (req, res) => {
+app.post("/unban", (req, res) => {
   const id = req.body.id;
-  try {
-    const guild = client.guilds.cache.first();
-    await guild.members.unban(id);
-    banList = banList.filter(u => u.id !== id);
-    res.redirect("/");
-  } catch {
-    res.send("Ban kaldırma başarısız.");
-  }
+  const guild = client.guilds.cache.first();
+  if (guild) guild.members.unban(id).catch(() => {});
+  delete bans[id];
+  res.send("Ban kaldırıldı.");
+});
+
+app.get("/whitelist", (req, res) => {
+  res.json(whitelist);
 });
 
 app.post("/whitelist", (req, res) => {
-  const id = req.body.id;
+  const { id } = req.body;
+  if (!id) return res.status(400).send("ID gerekli");
   if (!whitelist.includes(id)) whitelist.push(id);
-  res.redirect("/");
+  res.send("Eklendi");
 });
 
-// Başlat
-client.once("ready", () => {
-  console.log(`${client.user.tag} aktif!`);
+app.get("/logs", (req, res) => {
+  res.json(actionLog);
 });
+
+app.listen(PORT, () => console.log(`Web panel çalışıyor: ${PORT}`));
+
 client.login(TOKEN);
-
-app.listen(PORT, () => {
-  console.log(`Web panel ${PORT} portunda çalışıyor.`);
-});
