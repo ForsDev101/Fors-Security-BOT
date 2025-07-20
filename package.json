@@ -1,21 +1,13 @@
 {
-  "name": "fors-security-bot",
+  "name": "fors-guard",
   "version": "1.0.0",
-  "description": "Abuse engelleme sistemi - Forslandın",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.13.0",
-    "express": "^4.18.2",
-    "dotenv": "^16.3.1",
-    "quick.db": "^9.0.6",
-    "moment": "^2.29.4"
-  },
-  "engines": {
-    "node": ">=16.9.0"
-  },
-  "author": "fors",
-  "license": "MIT"
+    "discord.js": "^14.0.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2"
+  }
 }
