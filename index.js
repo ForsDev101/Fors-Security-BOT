@@ -8,6 +8,7 @@ const client = new Client({
   ],
 });
 
+// Roller (emoji ve pozisyon sıralamasıyla)
 const ROLE_ORDERED = [
   { name: "👑 Adalet Bakanı", position: 1 },
   { name: "👑 Adalet Bakanı Yardımcısı", position: 2 },
@@ -32,8 +33,39 @@ const ROLE_ORDERED = [
   { name: "🎮 OYUNCU", position: 17 },
 ];
 
-// KATEGORİ VE KANALLAR...
-const CATEGORIES = [ /* önceki yapıyla aynı, burada kısaca yerleştir */ ];
+// Kategoriler ve kanallar, izinli rollerle
+const CATEGORIES = [
+  {
+    name: "📋 KORDİNASYON",
+    channels: ["duyuru", "atama-duyuru", "bilgi-paylasim"],
+    visibleRoles: ["@everyone"],
+    writeRoles: ["Adalet Bakanı", "Adalet Bakanı Yardımcısı"],
+  },
+  {
+    name: "⚖️ ADALET BAKANLIĞI",
+    channels: ["genel", "mahkeme", "sonuclar"],
+    visibleRoles: ["Adalet Bakanı", "Adalet Bakanı Yardımcısı", "HÂKİM", "BAŞSAVCI", "SAVCI", "STAJYER AVUKAT", "AVUKAT"],
+    writeRoles: ["Adalet Bakanı", "Adalet Bakanı Yardımcısı", "HÂKİM", "BAŞSAVCI", "SAVCI"],
+  },
+  {
+    name: "🪖 İNZİBAT",
+    channels: ["inzibat-rapor", "inzibat-mahkeme", "inzibat-sonuclar"],
+    visibleRoles: ["İNZİBAT KOMUTANI", "İNZİBAT SUBAYI", "İNZİBAT ER", "@everyone"],
+    writeRoles: ["İNZİBAT KOMUTANI", "İNZİBAT SUBAYI", "İNZİBAT ER"],
+  },
+  {
+    name: "🪖 JANDARMA",
+    channels: ["jandarma-rapor", "jandarma-mahkeme", "jandarma-sonuclar"],
+    visibleRoles: ["JANDARMA KOMUTANI", "JANDARMA SUBAYI", "JANDARMA ER", "@everyone"],
+    writeRoles: ["JANDARMA KOMUTANI", "JANDARMA SUBAYI", "JANDARMA ER"],
+  },
+  {
+    name: "🕵️ MİLLİ İSTİHBARAT TEŞKİLATI",
+    channels: ["mit-rapor", "mit-mahkeme", "mit-sonuclar"],
+    visibleRoles: ["MİT BAŞKANI", "İSTİHBARAT SUBAYI", "ALAN AJANI", "Adalet Bakanı"],
+    writeRoles: ["MİT BAŞKANI", "İSTİHBARAT SUBAYI", "ALAN AJANI"],
+  },
+];
 
 client.on("messageCreate", async (message) => {
   if (message.content === ".başlat") {
@@ -46,50 +78,58 @@ client.on("messageCreate", async (message) => {
     const everyone = guild.roles.everyone;
 
     try {
-      // 1. Önce tüm kanalları sil
-      const channels = guild.channels.cache;
-      for (const [id, channel] of channels) {
-        await channel.delete("Sunucu sıfırlama - yeni kurulum");
+      // 1. Kanalları sil (komutun yazıldığı kanalı silme)
+      for (const channel of guild.channels.cache.values()) {
+        if (channel.id === message.channel.id) continue;
+        try {
+          await channel.delete("Sunucu sıfırlama - yeni kurulum");
+        } catch (e) {
+          console.warn(`Kanal silinemedi: ${channel.name} - ${e.message}`);
+        }
       }
 
-      // 2. Tüm rolleri sil (everyone hariç)
-      const roles = guild.roles.cache.filter(r => r.id !== everyone.id);
-      for (const [id, role] of roles) {
-        await role.delete("Sunucu sıfırlama - yeni kurulum");
+      // 2. Rolleri sil (everyone ve managed rolleri silme)
+      for (const role of guild.roles.cache.values()) {
+        if (role.managed || role.id === everyone.id) continue;
+        try {
+          await role.delete("Sunucu sıfırlama - yeni kurulum");
+        } catch (e) {
+          console.warn(`Rol silinemedi: ${role.name} - ${e.message}`);
+        }
       }
 
-      // 3. Rolleri oluştur
+      // 3. Rolleri oluştur ve kayıt et
       const createdRoles = {};
       for (const roleData of ROLE_ORDERED) {
         const role = await guild.roles.create({
           name: roleData.name,
           reason: "Sunucu kurulumu için rol oluşturuldu",
+          // İstersen buraya renk vb. ekleyebilirsin
         });
         createdRoles[roleData.name] = role;
       }
 
-      // 4. Kategorileri ve kanalları oluştur (izinlerle)
+      // 4. Kategorileri ve kanalları oluştur, izinleri ayarla
       for (const cat of CATEGORIES) {
         const category = await guild.channels.create({
-          name: cat.name,
-          type: 4 // Category
+          name: cat.name.toUpperCase(),
+          type: 4, // Kategori
+          reason: "Sunucu kurulumu için kategori oluşturuldu",
         });
 
         for (const chName of cat.channels) {
-          // İzin ayarları
           const permissionOverwrites = [];
 
-          // everyone için izin
+          // everyone için izinler
           if (cat.visibleRoles.includes("@everyone")) {
             permissionOverwrites.push({
               id: everyone.id,
               allow: [PermissionsBitField.Flags.ViewChannel],
-              deny: []
             });
           } else {
             permissionOverwrites.push({
               id: everyone.id,
-              deny: [PermissionsBitField.Flags.ViewChannel]
+              deny: [PermissionsBitField.Flags.ViewChannel],
             });
           }
 
@@ -100,7 +140,7 @@ client.on("messageCreate", async (message) => {
             if (role) {
               permissionOverwrites.push({
                 id: role.id,
-                allow: [PermissionsBitField.Flags.ViewChannel]
+                allow: [PermissionsBitField.Flags.ViewChannel],
               });
             }
           }
@@ -111,24 +151,27 @@ client.on("messageCreate", async (message) => {
             if (role) {
               permissionOverwrites.push({
                 id: role.id,
-                allow: [PermissionsBitField.Flags.SendMessages]
+                allow: [PermissionsBitField.Flags.SendMessages],
               });
             }
           }
 
           await guild.channels.create({
-            name: chName,
-            type: 0, // Text
+            name: chName.toUpperCase(),
+            type: 0, // Yazı kanalı
             parent: category.id,
-            permissionOverwrites
+            permissionOverwrites,
+            reason: "Sunucu kurulumu için kanal oluşturuldu",
           });
         }
       }
 
-      message.reply("✅ Sunucu sıfırlandı ve kuruldu!");
+      await message.reply("✅ Sunucu sıfırlandı ve kuruldu!");
     } catch (error) {
       console.error(error);
-      message.reply("❌ Kurulum sırasında hata oluştu.");
+      if (message.channel) {
+        message.channel.send("❌ Kurulum sırasında hata oluştu.");
+      }
     }
   }
 });
