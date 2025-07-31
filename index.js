@@ -21,6 +21,23 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember],
 });
 
+client.on('guildMemberAdd', member => {
+  const kayıtsızRol = member.guild.roles.cache.get(process.env.ROLE_KAYITSIZ);
+  if (!kayıtsızRol) return;
+
+  member.roles.add(kayıtsızRol).catch(console.error);
+
+  const log = member.guild.channels.cache.get(process.env.LOG_GELENGIDEN);
+  if (log) {
+    const embed = new EmbedBuilder()
+      .setTitle('Yeni Üye Katıldı')
+      .setDescription(`${member.user.tag} sunucuya katıldı ve otomatik kayıtsız rolü verildi.`)
+      .setColor(getRandomColor())
+      .setTimestamp();
+    log.send({ embeds: [embed] });
+  }
+});
+
 // --- Yardımcı fonksiyonlar ---
 
 // RPG renk oluşturucu
