@@ -1,19 +1,16 @@
 {
-  "name": "moderasyon-koruma-botu",
+  "name": "moderasyon-koruma-bot",
   "version": "1.0.0",
-  "description": "Node.js Discord botu - moderasyon ve koruma özellikleri",
+  "description": "Discord Moderasyon ve Koruma Botu - Slash Komutlu",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "deploy-commands": "node deploy-commands.js"
+    "deploy": "node deploy-commands.js"
   },
+  "author": "SeninAdın",
+  "license": "MIT",
   "dependencies": {
     "discord.js": "^14.11.0",
     "dotenv": "^16.3.1"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "author": "SeninAdın",
-  "license": "MIT"
+  }
 }
