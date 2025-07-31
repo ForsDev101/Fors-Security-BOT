@@ -1,17 +1,18 @@
 {
   "name": "moderasyon-koruma-bot",
   "version": "1.0.0",
-  "description": "Discord Moderasyon ve Koruma Botu - Slash komutlu",
+  "description": "Discord Moderasyon ve Koruma Botu - Slash Komut Destekli",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "deploy": "node deploy-commands.js"
+    "deploy-commands": "node deploy-commands.js"
   },
-  "author": "Senin İsmin",
-  "license": "MIT",
   "dependencies": {
     "discord.js": "^14.11.0",
     "dotenv": "^16.3.1",
     "ms": "^2.1.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
