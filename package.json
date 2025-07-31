@@ -1,13 +1,12 @@
 {
-  "name": "adalet-bakanligi-bot",
+  "name": "discord-sunucu-kur",
   "version": "1.0.0",
-  "description": "Adalet Bakanlığı sunucu kurulum botu",
+  "description": "Discord botu ile otomatik sunucu kanal ve rol kurulumu",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.11.0",
-    "dotenv": "^16.3.1"
+    "discord.js": "^14.11.0"
   }
 }
