@@ -23,6 +23,7 @@ const LOG_KOMUT = process.env.LOG_KOMUT;         // Komut log kanalı id
 const LOG_MOD = process.env.LOG_MOD;             // Moderasyon log kanalı id
 const LOG_GELEN = process.env.LOG_GELEN;         // Gelen log kanalı id
 const LOG_GIDEN = process.env.LOG_GIDEN;         // Giden log kanalı id
+const CLIENT_ID = process.env.CLIENT_ID; 
 
 // --- Veriler ve durumlar ---
 const warns = {}; // { guildId: { userId: [{mod, sebep, tarih}] } }
