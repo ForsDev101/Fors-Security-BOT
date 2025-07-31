@@ -1,128 +1,124 @@
 require('dotenv').config();
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
-const token = process.env.TOKEN;
-const clientId = process.env.CLIENT_ID; // Botun ID'si
-const guildId = process.env.GUILD_ID;   // Komutları test edeceğin sunucu ID'si (geliştirme için guild scope)
-
 const commands = [
   new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Kullanıcıyı sunucudan banlar.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Banlanacak kullanıcı').setRequired(true))
-    .addStringOption(option => option.setName('sebep').setDescription('Ban sebebi').setRequired(false)),
+    .setDescription('Bir kullanıcıyı sunucudan banlar.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Banlanacak kullanıcı').setRequired(true))
+    .addStringOption(opt =>
+      opt.setName('sebep').setDescription('Ban sebebi (isteğe bağlı)')),
 
   new SlashCommandBuilder()
     .setName('kick')
-    .setDescription('Kullanıcıyı sunucudan atar.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Atılacak kullanıcı').setRequired(true))
-    .addStringOption(option => option.setName('sebep').setDescription('Atma sebebi').setRequired(false)),
+    .setDescription('Bir kullanıcıyı sunucudan atar.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Atılacak kullanıcı').setRequired(true))
+    .addStringOption(opt =>
+      opt.setName('sebep').setDescription('Atılma sebebi (isteğe bağlı)')),
 
   new SlashCommandBuilder()
     .setName('mute')
-    .setDescription('Kullanıcıyı geçici olarak susturur.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Susturulacak kullanıcı').setRequired(true))
-    .addStringOption(option => option.setName('süre').setDescription('Susturma süresi (örn: 10m, 1h)').setRequired(false)),
+    .setDescription('Kullanıcıyı belirli süreliğine susturur.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Susturulacak kişi').setRequired(true))
+    .addStringOption(opt =>
+      opt.setName('süre').setDescription('Örn: 10m, 1h').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('unmute')
-    .setDescription('Susturmayı kaldırır.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Susturması kaldırılacak kullanıcı').setRequired(true)),
+    .setDescription('Kullanıcının susturmasını kaldırır.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Susturması kaldırılacak kişi').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('untimeout')
-    .setDescription('Timeoutu kaldırır.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Timeout kaldırılacak kullanıcı').setRequired(true)),
+    .setDescription('Kullanıcının timeout süresini kaldırır.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Timeout kaldırılacak kullanıcı').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('warn')
-    .setDescription('Kullanıcıya uyarı verir.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Uyarılacak kullanıcı').setRequired(true))
-    .addStringOption(option => option.setName('sebep').setDescription('Uyarı sebebi').setRequired(false)),
+    .setDescription('Bir kullanıcıya uyarı verir.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Uyarılacak kişi').setRequired(true))
+    .addStringOption(opt =>
+      opt.setName('sebep').setDescription('Uyarı sebebi').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('warnings')
-    .setDescription('Kullanıcının uyarılarını gösterir.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Uyarıları görülecek kullanıcı').setRequired(true)),
+    .setDescription('Kullanıcının uyarı geçmişini gösterir.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Kimin uyarıları gösterilsin').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('clear')
-    .setDescription('Mesajları siler.')
-    .addIntegerOption(option => option.setName('sayı').setDescription('Silinecek mesaj sayısı (1-100)').setRequired(true)),
+    .setDescription('Mesajları toplu şekilde siler.')
+    .addIntegerOption(opt =>
+      opt.setName('sayı').setDescription('Silinecek mesaj sayısı (1-100)').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('lock')
-    .setDescription('Kanalı kilitler.'),
+    .setDescription('Kanalı kilitler, herkesin yazmasını engeller.'),
 
   new SlashCommandBuilder()
     .setName('unlock')
-    .setDescription('Kanal kilidini açar.'),
+    .setDescription('Kanal kilidini açar, herkes mesaj yazabilir.'),
 
   new SlashCommandBuilder()
     .setName('slowmode')
-    .setDescription('Kanal için yavaş mod ayarlar.')
-    .addIntegerOption(option => option.setName('saniye').setDescription('Yavaş mod süresi (0-21600 saniye)').setRequired(true)),
+    .setDescription('Kanala yavaş mod ekler.')
+    .addIntegerOption(opt =>
+      opt.setName('saniye').setDescription('Saniye cinsinden süre (0-21600)').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('cezalar')
-    .setDescription('Kullanıcının cezalarını gösterir.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Cezaları görülecek kullanıcı').setRequired(true)),
+    .setDescription('Bir kullanıcının tüm cezalarını gösterir.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Ceza geçmişi gösterilecek kullanıcı').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('cezaişlemler')
-    .setDescription('Tüm ceza geçmişini gösterir.'),
+    .setDescription('Tüm sunucudaki ceza işlemlerini listeler.'),
 
   new SlashCommandBuilder()
     .setName('koruma-durum')
-    .setDescription('Koruma sistemlerinin durumunu gösterir.'),
+    .setDescription('Açık ve kapalı olan koruma sistemlerini listeler.'),
 
   new SlashCommandBuilder()
     .setName('log-ayarla')
-    .setDescription('Log kanalı ayarlar.')
-    .addChannelOption(option => option.setName('kanal').setDescription('Log kanalı').setRequired(true)),
+    .setDescription('Koruma ve moderasyon log kanalını ayarlar.')
+    .addChannelOption(opt =>
+      opt.setName('kanal').setDescription('Logların gönderileceği kanal').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('kayıt')
-    .setDescription('Kullanıcıyı kayıt eder.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Kayıt edilecek kullanıcı').setRequired(true))
-    .addStringOption(option => option.setName('isim').setDescription('Kullanıcının ismi').setRequired(true))
-    .addStringOption(option => option.setName('yaş').setDescription('Kullanıcının yaşı').setRequired(true)),
+    .setDescription('Bir kullanıcıyı kayıt eder.')
+    .addUserOption(opt =>
+      opt.setName('kullanıcı').setDescription('Kayıt edilecek kişi').setRequired(true))
+    .addStringOption(opt =>
+      opt.setName('isim').setDescription('İsim').setRequired(true))
+    .addStringOption(opt =>
+      opt.setName('yaş').setDescription('Yaş').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('komutlar')
-    .setDescription('Bot komutlarını gösterir.'),
-  
-  // Koruma komutları (aç/kapat şeklinde)
-  ...[
-    'koruma', 'antiraid', 'spam-engel', 'reklam-engel', 'capslock-engel',
-    'etiket-engel', 'rol-koruma', 'kanal-koruma', 'webhook-koruma', 'emoji-koruma'
-  ].map(name =>
-    new SlashCommandBuilder()
-      .setName(name)
-      .setDescription(`${name} korumasını açar/kapatır.`)
-      .addStringOption(opt =>
-        opt.setName('durum')
-          .setDescription('aç veya kapat')
-          .setRequired(true)
-          .addChoices(
-            { name: 'aç', value: 'aç' },
-            { name: 'kapat', value: 'kapat' }
-          )
-      )
-  )
-].map(cmd => cmd.toJSON());
+    .setDescription('Botun tüm komutlarını sayfalı şekilde listeler.'),
+]
+  .map(command => command.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(token);
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log('Slash komutları Discord’a kaydediliyor...');
+    console.log('💾 Slash komutlar yükleniyor...');
     await rest.put(
-      Routes.applicationGuildCommands(clientId, guildId),
-      { body: commands },
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+      { body: commands }
     );
-    console.log('Slash komutları başarıyla kaydedildi!');
+    console.log('✅ Slash komutlar başarıyla yüklendi.');
   } catch (error) {
-    console.error('Slash komut kaydetme hatası:', error);
+    console.error('❌ Komut yüklenirken hata:', error);
   }
 })();
