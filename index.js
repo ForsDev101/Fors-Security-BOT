@@ -1,22 +1,38 @@
 require('dotenv').config();
 
-const { 
-  Client, GatewayIntentBits, Partials, Collection, REST, Routes, SlashCommandBuilder, 
-  PermissionFlagsBits, EmbedBuilder, ChannelType 
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  Collection,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  EmbedBuilder,
+  ChannelType,
 } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 
 // --- ENVIRONMENT VARIABLES ---
 const {
-  TOKEN, CLIENT_ID, GUILD_ID,
-  LOG_GELENGIDEN, LOG_KOMUT, LOG_MOD,
-  ROLE_BOTYETKI, ROLE_KAYITSIZ, ROLE_UYE
+  TOKEN,
+  CLIENT_ID,
+  GUILD_ID,
+  LOG_GELENGIDEN,
+  LOG_KOMUT,
+  LOG_MOD,
+  ROLE_BOTYETKI,
+  ROLE_KAYITSIZ,
+  ROLE_UYE,
 } = process.env;
 
 // --- CLIENT SETUP ---
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds, 
-    GatewayIntentBits.GuildMembers, 
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
@@ -25,9 +41,9 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// --- GLOBAL VERİLER ---
+// --- GLOBAL DATA ---
 const komutlar = [];
-const cezalar = {};  // { userId: [ { tur, sebep, tarih } ] }
+const cezalar = {}; // { userId: [ { tur, sebep, tarih } ] }
 const korumaAyar = {
   aktif: false,
   antiraid: false,
@@ -43,7 +59,50 @@ const korumaAyar = {
 };
 const spamKontrol = new Map(); // userId: {count, lastMsg, timeoutId}
 
-// --- YARDIMCI FONKSİYON: Komut ekle ---
+const AYAR_DOSYA = path.join(__dirname, 'korumaAyar.json');
+const CEZA_DOSYA = path.join(__dirname, 'database.json');
+
+// --- LOAD / SAVE FUNCTIONS ---
+function ayarYukle() {
+  if (fs.existsSync(AYAR_DOSYA)) {
+    Object.assign(korumaAyar, JSON.parse(fs.readFileSync(AYAR_DOSYA, 'utf-8')));
+  }
+}
+function ayarKaydet() {
+  fs.writeFileSync(AYAR_DOSYA, JSON.stringify(korumaAyar, null, 2));
+}
+function cezaYukle() {
+  if (fs.existsSync(CEZA_DOSYA)) {
+    Object.assign(cezalar, JSON.parse(fs.readFileSync(CEZA_DOSYA, 'utf-8')));
+  }
+}
+function cezaKaydet() {
+  fs.writeFileSync(CEZA_DOSYA, JSON.stringify(cezalar, null, 2));
+}
+
+// Load saved data on start
+ayarYukle();
+cezaYukle();
+
+// --- HELPER FUNCTIONS ---
+function tarihFormatla(date = new Date()) {
+  return date.toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
+}
+
+function yetkiKontrol(member) {
+  if (!member) return false;
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (!ROLE_BOTYETKI) return false;
+  return member.roles.cache.has(ROLE_BOTYETKI);
+}
+
+function cezaEkle(userId, tur, sebep) {
+  if (!cezalar[userId]) cezalar[userId] = [];
+  cezalar[userId].push({ tur, sebep, tarih: tarihFormatla() });
+  cezaKaydet();
+}
+
+// --- COMMAND REGISTER FUNCTION ---
 function komutEkle(name, desc, options = []) {
   const komut = new SlashCommandBuilder()
     .setName(name)
@@ -56,10 +115,12 @@ function komutEkle(name, desc, options = []) {
       string: 'addStringOption',
       integer: 'addIntegerOption',
       number: 'addNumberOption',
-      channel: 'addChannelOption'
+      channel: 'addChannelOption',
     }[opt.type];
     if (method) {
-      komut[method](o => o.setName(opt.name).setDescription(opt.description).setRequired(opt.required ?? false));
+      komut[method]((o) =>
+        o.setName(opt.name).setDescription(opt.description).setRequired(opt.required ?? false)
+      );
     }
   }
 
@@ -67,7 +128,7 @@ function komutEkle(name, desc, options = []) {
   client.commands.set(name, { run: null });
 }
 
-// --- KOMUTLARI TANIMLA ---
+// --- COMMANDS DEFINITION ---
 
 // Moderasyon Komutları
 komutEkle('ban', 'Bir kullanıcıyı sunucudan yasakla.', [
@@ -106,9 +167,16 @@ komutEkle('slowmode', 'Kanala yavaş mod ayarlar.', [
 
 // Koruma Komutları
 const korumaKomutlar = [
-  'koruma', 'antiraid', 'spam-engel', 'reklam-engel',
-  'capslock-engel', 'etiket-engel', 'rol-koruma',
-  'kanal-koruma', 'webhook-koruma', 'emoji-koruma',
+  'koruma',
+  'antiraid',
+  'spam-engel',
+  'reklam-engel',
+  'capslock-engel',
+  'etiket-engel',
+  'rol-koruma',
+  'kanal-koruma',
+  'webhook-koruma',
+  'emoji-koruma',
 ];
 for (const k of korumaKomutlar) {
   komutEkle(k, `${k} sistemini açar veya kapatır.`, [
@@ -132,45 +200,26 @@ komutEkle('kayıt', 'Yeni üyeyi kayıt eder.', [
 ]);
 komutEkle('komutlar', 'Tüm komutları sayfalı ve emojili gösterir.');
 
-// --- KOMUTLARI DEPLOY ET ---
-
+// --- DEPLOY COMMANDS ---
 const rest = new REST({ version: '10' }).setToken(TOKEN);
+
 (async () => {
   try {
     console.log('Slash komutlar deploy ediliyor...');
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: komutlar },
-    );
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: komutlar });
     console.log('Komutlar başarıyla yüklendi!');
   } catch (error) {
     console.error('Komut deploy hatası:', error);
   }
 })();
 
-// --- YARDIMCI FONKSİYONLAR ---
-
-function tarihFormatla(date = new Date()) {
-  return date.toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
-}
-
-function yetkiKontrol(member) {
-  if (!member) return false;
-  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  if (!ROLE_BOTYETKI) return false;
-  return member.roles.cache.has(ROLE_BOTYETKI);
-}
-
-function cezaEkle(userId, tur, sebep) {
-  if (!cezalar[userId]) cezalar[userId] = [];
-  cezalar[userId].push({ tur, sebep, tarih: tarihFormatla() });
-}
-
-// --- BOT BAŞLAMA MESAJI ---
-client.on('ready', () => {
+// --- BOT READY ---
+client.once('ready', () => {
   console.log(`Bot hazır! Kullanıcı: ${client.user.tag}`);
 });
-client.on('interactionCreate', async interaction => {
+
+// Buraya kadar 1.part tamamdır.
+client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
   const { commandName, options, member, guild, channel, user } = interaction;
@@ -186,8 +235,10 @@ client.on('interactionCreate', async interaction => {
       const sebep = options.getString('sebep') || 'Belirtilmedi';
       const hedefMember = guild.members.cache.get(hedef.id);
 
-      if (!hedefMember) return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
-      if (!hedefMember.bannable) return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam.', ephemeral: true });
+      if (!hedefMember)
+        return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
+      if (!hedefMember.bannable)
+        return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam.', ephemeral: true });
 
       await hedefMember.ban({ reason: sebep });
       cezaEkle(hedef.id, 'Ban', sebep);
@@ -201,8 +252,10 @@ client.on('interactionCreate', async interaction => {
       const sebep = options.getString('sebep') || 'Belirtilmedi';
       const hedefMember = guild.members.cache.get(hedef.id);
 
-      if (!hedefMember) return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
-      if (!hedefMember.kickable) return interaction.reply({ content: '❌ Bu kullanıcıyı atamam.', ephemeral: true });
+      if (!hedefMember)
+        return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
+      if (!hedefMember.kickable)
+        return interaction.reply({ content: '❌ Bu kullanıcıyı atamam.', ephemeral: true });
 
       await hedefMember.kick(sebep);
       cezaEkle(hedef.id, 'Kick', sebep);
@@ -216,10 +269,19 @@ client.on('interactionCreate', async interaction => {
       const sure = options.getInteger('süre');
       const hedefMember = guild.members.cache.get(hedef.id);
 
-      if (!hedefMember) return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
+      if (!hedefMember)
+        return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
 
-      const muteRol = guild.roles.cache.find(r => r.name.toLowerCase().includes('mute') || r.name.toLowerCase().includes('susturulmuş'));
-      if (!muteRol) return interaction.reply({ content: '❌ "Mute" rolü bulunamadı.', ephemeral: true });
+      const muteRol = guild.roles.cache.find(
+        (r) =>
+          r.name.toLowerCase().includes('mute') ||
+          r.name.toLowerCase().includes('susturulmuş')
+      );
+      if (!muteRol)
+        return interaction.reply({ content: '❌ "Mute" rolü bulunamadı.', ephemeral: true });
+
+      if (hedefMember.roles.cache.has(muteRol.id))
+        return interaction.reply({ content: '❌ Kullanıcı zaten susturulmuş.', ephemeral: true });
 
       await hedefMember.roles.add(muteRol);
       cezaEkle(hedef.id, 'Mute', `Süre: ${sure} dakika`);
@@ -238,12 +300,19 @@ client.on('interactionCreate', async interaction => {
       const hedef = options.getUser('kullanıcı');
       const hedefMember = guild.members.cache.get(hedef.id);
 
-      if (!hedefMember) return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
+      if (!hedefMember)
+        return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
 
-      const muteRol = guild.roles.cache.find(r => r.name.toLowerCase().includes('mute') || r.name.toLowerCase().includes('susturulmuş'));
-      if (!muteRol) return interaction.reply({ content: '❌ "Mute" rolü bulunamadı.', ephemeral: true });
+      const muteRol = guild.roles.cache.find(
+        (r) =>
+          r.name.toLowerCase().includes('mute') ||
+          r.name.toLowerCase().includes('susturulmuş')
+      );
+      if (!muteRol)
+        return interaction.reply({ content: '❌ "Mute" rolü bulunamadı.', ephemeral: true });
 
-      if (!hedefMember.roles.cache.has(muteRol.id)) return interaction.reply({ content: '❌ Kullanıcı zaten susturulmamış.', ephemeral: true });
+      if (!hedefMember.roles.cache.has(muteRol.id))
+        return interaction.reply({ content: '❌ Kullanıcı zaten susturulmamış.', ephemeral: true });
 
       await hedefMember.roles.remove(muteRol);
       interaction.reply({ content: `🔊 ${hedef.tag} susturulması kaldırıldı.` });
@@ -254,9 +323,13 @@ client.on('interactionCreate', async interaction => {
       const hedef = options.getUser('kullanıcı');
       const hedefMember = guild.members.cache.get(hedef.id);
 
-      if (!hedefMember) return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
+      if (!hedefMember)
+        return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
 
-      if (!hedefMember.communicationDisabledUntilTimestamp || hedefMember.communicationDisabledUntilTimestamp < Date.now()) {
+      if (
+        !hedefMember.communicationDisabledUntilTimestamp ||
+        hedefMember.communicationDisabledUntilTimestamp < Date.now()
+      ) {
         return interaction.reply({ content: '❌ Kullanıcının timeoutu yok.', ephemeral: true });
       }
 
@@ -277,7 +350,7 @@ client.on('interactionCreate', async interaction => {
     else if (commandName === 'warnings') {
       const hedef = options.getUser('kullanıcı');
       const userCezalar = cezalar[hedef.id] || [];
-      const uyariListesi = userCezalar.filter(c => c.tur === 'Uyarı');
+      const uyariListesi = userCezalar.filter((c) => c.tur === 'Uyarı');
 
       if (uyariListesi.length === 0) {
         return interaction.reply({ content: `${hedef.tag} için uyarı bulunmamaktadır.`, ephemeral: true });
@@ -286,7 +359,9 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder()
         .setTitle(`${hedef.tag} Uyarı Geçmişi`)
         .setColor('Yellow')
-        .setDescription(uyariListesi.map((u, i) => `${i + 1}. Sebep: ${u.sebep} - Tarih: ${u.tarih}`).join('\n'));
+        .setDescription(
+          uyariListesi.map((u, i) => `${i + 1}. Sebep: ${u.sebep} - Tarih: ${u.tarih}`).join('\n')
+        );
 
       interaction.reply({ embeds: [embed], ephemeral: true });
     }
@@ -294,7 +369,8 @@ client.on('interactionCreate', async interaction => {
     // --- CLEAR ---
     else if (commandName === 'clear') {
       const sayi = options.getInteger('sayı');
-      if (sayi < 1 || sayi > 100) return interaction.reply({ content: '❌ 1 ile 100 arasında sayı giriniz.', ephemeral: true });
+      if (sayi < 1 || sayi > 100)
+        return interaction.reply({ content: '❌ 1 ile 100 arasında sayı giriniz.', ephemeral: true });
 
       const messages = await channel.messages.fetch({ limit: sayi });
       await channel.bulkDelete(messages, true);
@@ -317,20 +393,49 @@ client.on('interactionCreate', async interaction => {
     // --- SLOWMODE ---
     else if (commandName === 'slowmode') {
       const saniye = options.getInteger('saniye');
-      if (saniye < 0 || saniye > 21600) return interaction.reply({ content: '❌ 0-21600 arasında saniye giriniz.', ephemeral: true });
+      if (saniye < 0 || saniye > 21600)
+        return interaction.reply({ content: '❌ 0-21600 arasında saniye giriniz.', ephemeral: true });
 
       await channel.setRateLimitPerUser(saniye);
       interaction.reply({ content: `🐢 Yavaş mod ${saniye} saniye olarak ayarlandı.` });
-   }
-   // --- KORUMA KOMUTLARI ---
-    else if (korumaKomutlar.includes(commandName)) {
+    }
+  } catch (err) {
+    console.error(err);
+    if (!interaction.replied)
+      interaction.reply({ content: '❌ Bir hata oluştu!', ephemeral: true });
+  }
+});
+// Koruma komutları dizisi (deployda da kullanılıyor)
+const korumaKomutlar = [
+  'koruma', 'antiraid', 'spam-engel', 'reklam-engel',
+  'capslock-engel', 'etiket-engel', 'rol-koruma',
+  'kanal-koruma', 'webhook-koruma', 'emoji-koruma',
+];
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName, options, member, guild, channel } = interaction;
+
+  // Yetki kontrolü
+  if (!yetkiKontrol(member)) {
+    return interaction.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!', ephemeral: true });
+  }
+
+  try {
+    if (korumaKomutlar.includes(commandName)) {
       const durum = options.getString('durum');
-      if (!['aç', 'kapat'].includes(durum)) return interaction.reply({ content: '❌ Durum "aç" veya "kapat" olmalı.', ephemeral: true });
+      if (!['aç', 'kapat'].includes(durum)) {
+        return interaction.reply({ content: '❌ Durum "aç" veya "kapat" olmalı.', ephemeral: true });
+      }
 
       const key = commandName.replace(/-/g, '').toLowerCase();
-      if (!(key in korumaAyar)) return interaction.reply({ content: '❌ Bu koruma sistemi bulunamadı.', ephemeral: true });
+      if (!(key in korumaAyar)) {
+        return interaction.reply({ content: '❌ Bu koruma sistemi bulunamadı.', ephemeral: true });
+      }
 
       korumaAyar[key] = (durum === 'aç');
+      ayarKaydet();
 
       interaction.reply({ content: `✅ ${commandName} sistemi ${durum === 'aç' ? 'açıldı' : 'kapatıldı'}.` });
 
@@ -340,14 +445,13 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    // --- LOG AYARLA ---
     else if (commandName === 'log-ayarla') {
       const kanal = options.getChannel('kanal');
       korumaAyar.logKanal = kanal.id;
+      ayarKaydet();
       interaction.reply({ content: `✅ Log kanalı ${kanal} olarak ayarlandı.` });
     }
 
-    // --- CEZALAR ---
     else if (commandName === 'cezalar') {
       const hedef = options.getUser('kullanıcı');
       const userCezalar = cezalar[hedef.id] || [];
@@ -359,12 +463,13 @@ client.on('interactionCreate', async interaction => {
       const embed = new EmbedBuilder()
         .setTitle(`${hedef.tag} Ceza Geçmişi`)
         .setColor('Red')
-        .setDescription(userCezalar.map((c, i) => `${i + 1}. [${c.tur}] Sebep: ${c.sebep} - Tarih: ${c.tarih}`).join('\n'));
+        .setDescription(
+          userCezalar.map((c, i) => `${i + 1}. [${c.tur}] Sebep: ${c.sebep} - Tarih: ${c.tarih}`).join('\n')
+        );
 
       interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
-    // --- CEZAİŞLEMLER ---
     else if (commandName === 'cezaişlemler') {
       let text = '';
       for (const [userId, cezaList] of Object.entries(cezalar)) {
@@ -378,7 +483,6 @@ client.on('interactionCreate', async interaction => {
       interaction.reply({ content: text, ephemeral: true });
     }
 
-    // --- KORUMA-DURUM ---
     else if (commandName === 'koruma-durum') {
       let durumlar = '';
       for (const [key, val] of Object.entries(korumaAyar)) {
@@ -388,17 +492,18 @@ client.on('interactionCreate', async interaction => {
       interaction.reply({ content: durumlar || 'Koruma sistemi durumu bulunamadı.', ephemeral: true });
     }
 
-    // --- KAYIT ---
     else if (commandName === 'kayıt') {
       const hedef = options.getUser('kullanıcı');
       const isim = options.getString('isim');
       const yas = options.getInteger('yaş');
       const hedefMember = guild.members.cache.get(hedef.id);
 
-      if (!hedefMember) return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
-
-      if (!ROLE_KAYITSIZ || !ROLE_UYE) return interaction.reply({ content: '❌ Kayıtsız ve üye rolleri env dosyasından ayarlanmalı.', ephemeral: true });
-
+      if (!hedefMember) {
+        return interaction.reply({ content: '❌ Kullanıcı sunucuda değil.', ephemeral: true });
+      }
+      if (!ROLE_KAYITSIZ || !ROLE_UYE) {
+        return interaction.reply({ content: '❌ Kayıtsız ve üye rolleri env dosyasından ayarlanmalı.', ephemeral: true });
+      }
       if (!hedefMember.roles.cache.has(ROLE_KAYITSIZ)) {
         return interaction.reply({ content: '❌ Kullanıcı zaten kayıtlı.', ephemeral: true });
       }
@@ -410,7 +515,6 @@ client.on('interactionCreate', async interaction => {
       interaction.reply({ content: `✅ ${hedef.tag} başarıyla kayıt edildi. İsim: ${isim}, Yaş: ${yas}` });
     }
 
-    // --- KOMUTLAR SAYFALI ---
     else if (commandName === 'komutlar') {
       const sayfalar = [
         [
@@ -465,16 +569,18 @@ client.on('interactionCreate', async interaction => {
 
       const collector = mesaj.createReactionCollector({
         filter: (reaction, user) => ['⬅️', '➡️'].includes(reaction.emoji.name) && user.id === interaction.user.id,
-        time: 60000
+        time: 60000,
       });
 
       collector.on('collect', (reaction, user) => {
         reaction.users.remove(user.id).catch(() => {});
+
         if (reaction.emoji.name === '➡️') {
           if (sayfa < sayfalar.length - 1) sayfa++;
         } else if (reaction.emoji.name === '⬅️') {
           if (sayfa > 0) sayfa--;
         }
+
         const yeniEmbed = new EmbedBuilder()
           .setTitle(`Komut Listesi (${sayfa + 1}/${sayfalar.length})`)
           .setDescription(sayfalar[sayfa])
@@ -490,30 +596,39 @@ client.on('interactionCreate', async interaction => {
     }
   } catch (err) {
     console.error(err);
-    interaction.reply({ content: '❌ Bir hata oluştu!', ephemeral: true });
-  }
-});
-// Komutlar sayfalı emoji koleksiyonu sonu
-      collector.on('end', () => {
-        mesaj.reactions.removeAll().catch(() => {});
-      });
-    }
-  } catch (err) {
-    console.error(err);
     if (!interaction.replied)
       interaction.reply({ content: '❌ Bir hata oluştu!', ephemeral: true });
   }
 });
-
-// --- Buradan itibaren 3. part ---
-
-// Gerekli modüller
 const fs = require('fs');
 const path = require('path');
 
-// Koruma ayarlarını ve ceza verilerini yükle / kaydet fonksiyonları
+// Dosya yolları
 const AYAR_DOSYA = path.join(__dirname, 'korumaAyar.json');
 const CEZA_DOSYA = path.join(__dirname, 'database.json');
+
+// Ayarları ve cezaları dosyadan yükle
+function ayarYukle() {
+  try {
+    if (fs.existsSync(AYAR_DOSYA)) {
+      const data = fs.readFileSync(AYAR_DOSYA);
+      Object.assign(korumaAyar, JSON.parse(data));
+    }
+  } catch (e) {
+    console.error('Koruma ayarları yüklenirken hata:', e);
+  }
+}
+
+function cezaYukle() {
+  try {
+    if (fs.existsSync(CEZA_DOSYA)) {
+      const data = fs.readFileSync(CEZA_DOSYA);
+      Object.assign(cezalar, JSON.parse(data));
+    }
+  } catch (e) {
+    console.error('Ceza verileri yüklenirken hata:', e);
+  }
+}
 
 function ayarKaydet() {
   fs.writeFileSync(AYAR_DOSYA, JSON.stringify(korumaAyar, null, 2));
@@ -523,154 +638,101 @@ function cezaKaydet() {
   fs.writeFileSync(CEZA_DOSYA, JSON.stringify(cezalar, null, 2));
 }
 
-// Yeni ceza ekleme fonksiyonu
+// Ceza ekleme fonksiyonu
 function cezaEkle(userId, tur, sebep) {
   if (!cezalar[userId]) cezalar[userId] = [];
-  cezalar[userId].push({ tur, sebep, tarih: new Date().toLocaleString('tr-TR') });
+  cezalar[userId].push({ tur, sebep, tarih: tarihFormatla() });
   cezaKaydet();
 }
 
-// Yetki kontrolü fonksiyonu
-function yetkiKontrol(member) {
-  if (!member) return false;
-  return member.roles.cache.has(ROLE_BOTYETKI) || member.permissions.has('Administrator');
-}
+// Spam kontrol Map (userId: {count, lastMsgTimestamp, timeoutId})
+const spamKontrol = new Map();
 
-// Spam engelleme için geçici veri yapısı
-const spamVeri = new Map();
-
-// Mesajlarda koruma kontrolleri
-client.on('messageCreate', async message => {
+// Mesaj koruma eventi (örnek spam ve reklam engel)
+client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
-  if (!korumaAyar.koruma) return;
 
   const member = message.member;
-  const içerik = message.content;
+  const content = message.content.toLowerCase();
 
   // Spam engel
   if (korumaAyar.spamEngel) {
-    let data = spamVeri.get(member.id) || { count: 0, last: 0 };
+    const userData = spamKontrol.get(message.author.id) || { count: 0, lastMsg: 0, timeoutId: null };
     const now = Date.now();
-    if (now - data.last < 2000) data.count++;
-    else data.count = 1;
-    data.last = now;
-    spamVeri.set(member.id, data);
 
-    if (data.count >= 5) {
-      await message.delete().catch(() => {});
-      cezaEkle(member.id, 'Spam Engelleme', 'Çok hızlı mesaj atma');
-      const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-      if (logKanal) logKanal.send(`🚫 ${member.user.tag} spam yaparken mesajları silindi.`);
-      return;
+    if (now - userData.lastMsg < 3000) {
+      userData.count += 1;
+    } else {
+      userData.count = 1;
     }
+    userData.lastMsg = now;
+
+    if (userData.count >= 5) {
+      try {
+        await message.delete();
+        if (korumaAyar.logKanal) {
+          const logKanal = message.guild.channels.cache.get(korumaAyar.logKanal);
+          if (logKanal) logKanal.send(`🚫 ${message.author.tag} spam yaptığı için mesajı silindi.`);
+        }
+      } catch {}
+    }
+
+    spamKontrol.set(message.author.id, userData);
+
+    // 5 saniye sonra sayaç sıfırlanıyor
+    clearTimeout(userData.timeoutId);
+    userData.timeoutId = setTimeout(() => {
+      spamKontrol.delete(message.author.id);
+    }, 5000);
   }
 
-  // Reklam engel
+  // Reklam engel (basit örnek)
   if (korumaAyar.reklamEngel) {
-    const reklamRegex = /(discord\.gg|http(s)?:\/\/|www\.)/i;
-    if (reklamRegex.test(içerik)) {
-      await message.delete().catch(() => {});
-      cezaEkle(member.id, 'Reklam Engelleme', 'Reklam veya link paylaşımı');
-      const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-      if (logKanal) logKanal.send(`🚫 ${member.user.tag} reklam yapmaya çalıştı, mesaj silindi.`);
-      return;
+    const reklamlar = ['discord.gg/', 'http://', 'https://', '.com', '.net', '.org'];
+    if (reklamlar.some(link => content.includes(link))) {
+      try {
+        await message.delete();
+        if (korumaAyar.logKanal) {
+          const logKanal = message.guild.channels.cache.get(korumaAyar.logKanal);
+          if (logKanal) logKanal.send(`🚫 ${message.author.tag} reklam yaptığı için mesajı silindi.`);
+        }
+      } catch {}
     }
   }
 
   // Capslock engel
   if (korumaAyar.capslockEngel) {
-    const upperCount = (içerik.match(/[A-Z]/g) || []).length;
-    const totalCount = içerik.replace(/[^a-zA-Z]/g, '').length;
-    if (totalCount > 5 && upperCount / totalCount >= 0.7) {
-      await message.delete().catch(() => {});
-      cezaEkle(member.id, 'Capslock Engelleme', 'Aşırı büyük harf kullanımı');
-      const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-      if (logKanal) logKanal.send(`🚫 ${member.user.tag} capslock kullandı, mesaj silindi.`);
-      return;
+    if (content.length > 5 && content === content.toUpperCase()) {
+      try {
+        await message.delete();
+        if (korumaAyar.logKanal) {
+          const logKanal = message.guild.channels.cache.get(korumaAyar.logKanal);
+          if (logKanal) logKanal.send(`🚫 ${message.author.tag} büyük harf kullanımı engellendi.`);
+        }
+      } catch {}
     }
   }
 
   // Etiket engel
   if (korumaAyar.etiketEngel) {
-    if (message.mentions.everyone) {
-      await message.delete().catch(() => {});
-      cezaEkle(member.id, 'Etiket Engelleme', '@everyone veya @here etiketi');
-      const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-      if (logKanal) logKanal.send(`🚫 ${member.user.tag} herkesi etiketledi, mesaj silindi.`);
-      return;
+    if (message.mentions.users.size > 3) {
+      try {
+        await message.delete();
+        if (korumaAyar.logKanal) {
+          const logKanal = message.guild.channels.cache.get(korumaAyar.logKanal);
+          if (logKanal) logKanal.send(`🚫 ${message.author.tag} çok fazla etiketlediği için mesajı silindi.`);
+        }
+      } catch {}
     }
   }
 });
 
-// Rol silme koruması
-client.on('roleDelete', async role => {
-  if (!korumaAyar.rolKoruma) return;
-  const guild = role.guild;
-  const audit = await guild.fetchAuditLogs({ limit: 1, type: 'ROLE_DELETE' });
-  const entry = audit.entries.first();
-  if (!entry) return;
-  if (entry.executor.id === client.user.id) return;
-
-  const executorMember = guild.members.cache.get(entry.executor.id);
-  if (!yetkiKontrol(executorMember)) {
-    const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-    if (logKanal) logKanal.send(`⚠️ Yetkisiz rol silme: ${executorMember.user.tag} tarafından ${role.name} silindi.`);
-  }
-});
-
-// Kanal silme koruması
-client.on('channelDelete', async channel => {
-  if (!korumaAyar.kanalKoruma) return;
-  const guild = channel.guild;
-  const audit = await guild.fetchAuditLogs({ limit: 1, type: 'CHANNEL_DELETE' });
-  const entry = audit.entries.first();
-  if (!entry) return;
-  if (entry.executor.id === client.user.id) return;
-
-  const executorMember = guild.members.cache.get(entry.executor.id);
-  if (!yetkiKontrol(executorMember)) {
-    const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-    if (logKanal) logKanal.send(`⚠️ Yetkisiz kanal silme: ${executorMember.user.tag} tarafından ${channel.name} silindi.`);
-  }
-});
-
-// Webhook koruma
-client.on('webhookUpdate', async channel => {
-  if (!korumaAyar.webhookKoruma) return;
-
-  const guild = channel.guild;
-  const audit = await guild.fetchAuditLogs({ limit: 5, type: 'WEBHOOK_CREATE' });
-  audit.entries.forEach(entry => {
-    if (entry.executor.id === client.user.id) return;
-    const executorMember = guild.members.cache.get(entry.executor.id);
-    if (!yetkiKontrol(executorMember)) {
-      const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-      if (logKanal) logKanal.send(`⚠️ Yetkisiz webhook oluşturma: ${executorMember.user.tag} tarafından ${channel.name} kanalına webhook oluşturuldu.`);
-    }
-  });
-});
-
-// Emoji koruma
-client.on('emojiDelete', async emoji => {
-  if (!korumaAyar.emojiKoruma) return;
-  const guild = emoji.guild;
-  const audit = await guild.fetchAuditLogs({ limit: 1, type: 'EMOJI_DELETE' });
-  const entry = audit.entries.first();
-  if (!entry) return;
-  if (entry.executor.id === client.user.id) return;
-
-  const executorMember = guild.members.cache.get(entry.executor.id);
-  if (!yetkiKontrol(executorMember)) {
-    const logKanal = client.channels.cache.get(korumaAyar.logKanal);
-    if (logKanal) logKanal.send(`⚠️ Yetkisiz emoji silme: ${executorMember.user.tag} tarafından ${emoji.name} emoji silindi.`);
-  }
-});
-
-// Bot hazır olduğunda
+// Bot hazır mesajı
 client.once('ready', () => {
-  console.log(`Bot giriş yaptı: ${client.user.tag}`);
-  client.user.setActivity('Koruma & Moderasyon | /komutlar');
+  console.log(`${client.user.tag} aktif!`);
+  ayarYukle();
+  cezaYukle();
 });
 
-// Bot token ile giriş yapar
+// Giriş yap
 client.login(TOKEN);
