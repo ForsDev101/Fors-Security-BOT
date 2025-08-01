@@ -1,10 +1,11 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { readJSON } = require('../../utils/fileHandler');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('kayıt')
-    .setDescription('Yeni gelen üyeyi isim ve yaş ile kayıt eder')
+    .setDescription('Yeni gelen üyeyi kayıt eder')
     .addUserOption(option =>
       option.setName('kullanıcı')
         .setDescription('Kayıt edilecek kullanıcı')
@@ -20,57 +21,47 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: false }); // Hem süre aşımı olmasın hem herkese görünsün
-
-    const kullanıcı = interaction.options.getUser('kullanıcı');
-    const isim = interaction.options.getString('isim');
-    const yaş = interaction.options.getInteger('yaş');
-
-    const guild = interaction.guild;
-    const member = guild.members.cache.get(kullanıcı.id);
-    if (!member) {
-      return interaction.editReply({ content: 'Kullanıcı sunucuda bulunamadı.' });
-    }
-
-    // Config.json'dan rol ID'lerini çek
-    const config = readJSON('./data/config.json')[guild.id];
-    if (!config) {
-      return interaction.editReply({ content: 'Sunucu ayarları yapılandırılmamış.' });
-    }
-
-    const uyeRol = guild.roles.cache.get(config.uyeRoleId);
-    const kayıtsızRol = guild.roles.cache.get(config.kayıtsızRoleId);
-    if (!uyeRol || !kayıtsızRol) {
-      return interaction.editReply({ content: 'Rol ayarları eksik.' });
-    }
-
     try {
-      // Rol işlemleri
+      await interaction.deferReply();
+
+      const kullanıcı = interaction.options.getUser('kullanıcı');
+      const isim = interaction.options.getString('isim');
+      const yaş = interaction.options.getInteger('yaş');
+      const guild = interaction.guild;
+      const member = guild.members.cache.get(kullanıcı.id);
+
+      const config = readJSON('./data/config.json')[guild.id];
+      if (!config) {
+        return await interaction.editReply({ content: '⚠️ Sunucu ayarları yapılmamış.' });
+      }
+
+      const uyeRol = guild.roles.cache.get(config.uyeRoleId);
+      const kayıtsızRol = guild.roles.cache.get(config.kayıtsızRoleId);
+
+      if (!uyeRol || !kayıtsızRol) {
+        return await interaction.editReply({ content: '⚠️ Rol ayarları eksik.' });
+      }
+
       await member.roles.add(uyeRol);
       await member.roles.remove(kayıtsızRol);
-
-      // Kullanıcı adını değiştirme
       await member.setNickname(`${isim} | ${yaş}`);
 
-      // Rastgele embed rengi
-      const renkler = ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Aqua', 'Orange'];
-      const rastgeleRenk = renkler[Math.floor(Math.random() * renkler.length)];
-
-      // Embed
       const embed = new EmbedBuilder()
         .setTitle('✅ Kayıt Başarılı')
         .setDescription(`${member} başarıyla kayıt edildi!\n\n**İsim:** ${isim}\n**Yaş:** ${yaş}`)
-        .setColor(rastgeleRenk)
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setFooter({ text: `Kayıt yapan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-      // Embed yanıtı
-      await interaction.editReply({ embeds: [embed] });
+      await rpgEmbed(interaction, embed, 500); // RPG renk geçişi
 
     } catch (error) {
       console.error(error);
-      return interaction.editReply({ content: 'Kayıt sırasında bir hata oluştu.' });
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
     }
   }
 };
