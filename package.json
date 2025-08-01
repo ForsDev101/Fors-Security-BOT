@@ -2,10 +2,10 @@
   "name": "fors-security-bot",
   "version": "1.0.0",
   "description": "Discord koruma ve moderasyon botu, RPG renkli embedlerle.",
-  "main": "src/index.js",
+  "main": "index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node index.js"
   },
   "author": "Emir Aris",
   "license": "MIT",
