@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 
 const komutlarSayfalari = [
   {
-    title: 'Koruma Komutları',
+    title: '🛡️ Koruma Komutları',
     description: `
 /koruma — Tüm koruma sistemini aç/kapat
 /antiraid — Raid korumasını aç/kapat
@@ -17,7 +17,7 @@ const komutlarSayfalari = [
     `
   },
   {
-    title: 'Diğer Komutlar',
+    title: '⚙️ Diğer Komutlar',
     description: `
 /log-ayarla — Log kanalını ayarlar
 /kayıt — Yeni gelen kullanıcıyı kayıt eder (isim ve yaşla)
@@ -47,58 +47,46 @@ module.exports = {
         .setFooter({ text: `Sayfa ${page + 1} / ${komutlarSayfalari.length}` });
     };
 
-    const row = new ActionRowBuilder()
+    const row = () => new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
           .setCustomId('previous')
           .setLabel('⬅️')
           .setStyle(ButtonStyle.Primary)
-          .setDisabled(true),
+          .setDisabled(page === 0),
         new ButtonBuilder()
           .setCustomId('next')
           .setLabel('➡️')
           .setStyle(ButtonStyle.Primary)
-          .setDisabled(komutlarSayfalari.length <= 1)
+          .setDisabled(page === komutlarSayfalari.length - 1)
       );
 
-    const embedMessage = await interaction.reply({ embeds: [generateEmbed(page)], components: [row], fetchReply: true });
+    const embedMessage = await interaction.reply({
+      embeds: [generateEmbed(page)],
+      components: [row()],
+      fetchReply: true
+    });
 
     const collector = embedMessage.createMessageComponentCollector({
+      filter: i => i.user.id === interaction.user.id,
       time: 60000
     });
 
     collector.on('collect', async i => {
-      if (i.user.id !== interaction.user.id) {
-        return i.reply({ content: 'Bu butonları sadece komutu kullanan kişi kullanabilir.', ephemeral: true });
-      }
-
-      if (i.customId === 'next') {
+      if (i.customId === 'next' && page < komutlarSayfalari.length - 1) {
         page++;
-        if (page >= komutlarSayfalari.length) page = komutlarSayfalari.length - 1;
-      } else if (i.customId === 'previous') {
+      } else if (i.customId === 'previous' && page > 0) {
         page--;
-        if (page < 0) page = 0;
       }
 
-      await i.update({ embeds: [generateEmbed(page)], components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('previous')
-            .setLabel('⬅️')
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId('next')
-            .setLabel('➡️')
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === komutlarSayfalari.length -1)
-        )
-      ]});
+      await i.update({ embeds: [generateEmbed(page)], components: [row()] });
     });
 
     collector.on('end', async () => {
-      if (!embedMessage.deleted) {
-        await embedMessage.edit({ components: [] }).catch(() => {});
+      try {
+        await embedMessage.edit({ components: [] });
+      } catch (err) {
+        console.error('Mesaj düzenlenemedi:', err);
       }
     });
   }
