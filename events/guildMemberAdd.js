@@ -1,30 +1,18 @@
-// Yeni üye sunucuya katılınca çalışan event
+const { readJSON } = require('../utils/fileHandler');
+
 module.exports = {
   name: 'guildMemberAdd',
   async execute(member) {
     try {
-      // Otomatik Kayıtsız rolü verme
-      const config = require('../data/config.json')[member.guild.id];
+      const config = readJSON('./data/config.json')[member.guild.id];
       if (!config) return;
 
-      const kayıtsızRolId = config.kayıtsızRoleId;
-      if (!kayıtsızRolId) return;
-
-      const role = member.guild.roles.cache.get(kayıtsızRolId);
-      if (!role) return;
-
-      await member.roles.add(role);
-
-      // Log kanalı varsa hoşgeldin mesajı gönder (isteğe bağlı)
-      const logChannelId = config.logChannelId;
-      if (!logChannelId) return;
-
-      const channel = member.guild.channels.cache.get(logChannelId);
-      if (!channel) return;
-
-      channel.send(`🎉 ${member.user.tag} sunucuya katıldı! Otomatik olarak kayıtsız rolü verildi.`);
-    } catch (error) {
-      console.error('guildMemberAdd event hatası:', error);
+      const kayıtsızRol = member.guild.roles.cache.get(config.kayıtsızRoleId);
+      if (kayıtsızRol) {
+        await member.roles.add(kayıtsızRol);
+      }
+    } catch (err) {
+      console.error('guildMemberAdd hatası:', err);
     }
   }
 };
