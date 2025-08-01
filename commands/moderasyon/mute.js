@@ -1,50 +1,48 @@
-import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
-export const data = new SlashCommandBuilder()
-  .setName('mute')
-  .setDescription('Kullanıcıyı belirli dakikalar susturur')
-  .addUserOption(option =>
-    option.setName('kullanıcı')
-      .setDescription('Susturulacak kullanıcı')
-      .setRequired(true))
-  .addIntegerOption(option =>
-    option.setName('süre')
-      .setDescription('Süre (dakika)')
-      .setRequired(true))
-  .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers);
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('Bir kullanıcıyı susturur')
+    .addUserOption(option =>
+      option.setName('kullanıcı')
+        .setDescription('Susturulacak kullanıcı')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('sebep')
+        .setDescription('Susturma sebebi')
+        .setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
-export async function execute(interaction) {
-  const user = interaction.options.getUser('kullanıcı');
-  const süre = interaction.options.getInteger('süre');
+  async execute(interaction) {
+    try {
+      await interaction.deferReply();
 
-  if (!interaction.guild) return interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', ephemeral: true });
+      const user = interaction.options.getUser('kullanıcı');
+      const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+      const member = await interaction.guild.members.fetch(user.id);
 
-  const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-  if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+      if (!member.moderatable) {
+        return await interaction.editReply({ content: '❌ Bu kullanıcıyı susturamıyorum.' });
+      }
 
-  if (!member.moderatable) return interaction.reply({ content: 'Bu kullanıcıyı susturamam.', ephemeral: true });
+      await member.timeout(15 * 60 * 1000, reason); // 15 dk timeout
 
-  try {
-    await member.timeout(süre * 60 * 1000, `Mute: ${interaction.user.tag}`);
-  } catch {
-    return interaction.reply({ content: 'Susturma sırasında hata oluştu.', ephemeral: true });
+      const embed = new EmbedBuilder()
+        .setTitle('🔇 Kullanıcı Susturuldu')
+        .setDescription(`${user} susturuldu.\n**Sebep:** ${reason}`)
+        .setFooter({ text: `Susturan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await rpgEmbed(interaction, embed, 500);
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
+    }
   }
-
-  const embed = new EmbedBuilder()
-    .setTitle('Bir kullanıcı susturuldu')
-    .setColor('Yellow')
-    .addFields(
-      { name: 'Kullanıcı', value: `${user.tag} (${user.id})` },
-      { name: 'Yetkili', value: `${interaction.user.tag}` },
-      { name: 'Süre', value: `${süre} dakika` }
-    )
-    .setTimestamp();
-
-  await interaction.reply({ embeds: [embed] });
-
-  const logModID = process.env.LOG_MOD;
-  if (logModID) {
-    const logChannel = interaction.guild.channels.cache.get(logModID);
-    if (logChannel) logChannel.send({ embeds: [embed] }).catch(() => {});
-  }
-}
+};
