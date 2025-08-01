@@ -1,26 +1,33 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('lock')
-    .setDescription('Kanalı kilitler, mesaj gönderimini engeller.')
+    .setDescription('Kanalı kilitler')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
   async execute(interaction) {
-    const channel = interaction.channel;
-
     try {
+      await interaction.deferReply();
+
+      const channel = interaction.channel;
       await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
+
       const embed = new EmbedBuilder()
-        .setColor('Red')
-        .setTitle('Kanal Kilitlendi')
-        .setDescription(`${channel} kanalı mesaj gönderimine kapatıldı.`)
+        .setTitle('🔒 Kanal Kilitlendi')
+        .setDescription(`${channel} kanalı kilitlendi.`)
+        .setFooter({ text: `Kilitleyen: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed] });
-    } catch (error) {
-      console.error(error);
-      interaction.reply({ content: 'Kanal kilitlenirken bir hata oluştu.', ephemeral: true });
+      await rpgEmbed(interaction, embed, 500);
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
     }
   }
 };
