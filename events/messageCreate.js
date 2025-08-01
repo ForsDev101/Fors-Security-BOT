@@ -1,18 +1,13 @@
-const { readJSON } = require('../utils/fileHandler');
-
 module.exports = {
   name: 'messageCreate',
   async execute(message) {
     if (message.author.bot) return;
 
-    // Örnek: Selamlaşma sistemi
-    const greetings = ['sa', 'selam', 'selamün aleyküm', 'aleyküm selam', 'slm', 's.a', 'selamun aleykum'];
-    const msgContent = message.content.toLowerCase();
+    const greetings = ['sa', 'selam', 'selamün aleyküm', 'aleyküm selam', 'slm', 's.a'];
+    const msg = message.content.toLowerCase();
 
-    if (greetings.some(greet => msgContent.includes(greet))) {
-      message.channel.send(`Aleyküm selam hoş geldin, ${message.author}!`);
+    if (greetings.some(greet => msg.includes(greet))) {
+      message.reply('Aleyküm selam, hoş geldin! 😎');
     }
-
-    // Buraya koruma sistemleri, spam, capslock engelleme gibi event tabanlı işlemler eklenebilir.
   }
 };
