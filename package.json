@@ -1,20 +1,16 @@
 {
-  "name": "discord-koruma-moderasyon-botu",
+  "name": "discord-moderasyon-bot",
   "version": "1.0.0",
-  "description": "Discord sunucuları için kapsamlı koruma ve moderasyon botu. Slash komutlu, loglama, spam, reklam, capslock engelleme ve daha fazlası.",
+  "description": "Discord.js v14 ile geliştirilmiş moderasyon ve koruma botu",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js"
   },
-  "author": "Emir Aris",
+  "author": "Senin İsmin",
   "license": "MIT",
   "dependencies": {
     "discord.js": "^14.11.0",
     "dotenv": "^16.3.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
   },
   "engines": {
     "node": ">=18.0.0"
