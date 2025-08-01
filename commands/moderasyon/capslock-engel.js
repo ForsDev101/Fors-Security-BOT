@@ -1,17 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-const configPath = path.join(__dirname, '..', '..', 'data', 'koruma.json');
-
-function loadConfig() {
-  if (!fs.existsSync(configPath)) return {};
-  return JSON.parse(fs.readFileSync(configPath));
-}
-
-function saveConfig(config) {
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-}
+const { readJSON, writeJSON } = require('../../utils/fileHandler');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -21,29 +10,34 @@ module.exports = {
       option.setName('durum')
         .setDescription('Aç veya kapat')
         .setRequired(true)
-        .addChoices(
-          { name: 'Aç', value: 'ac' },
-          { name: 'Kapat', value: 'kapat' }
-        ))
+        .addChoices({ name: 'Aç', value: 'ac' }, { name: 'Kapat', value: 'kapat' }))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    const durum = interaction.options.getString('durum');
-    const guildId = interaction.guildId;
-    let config = loadConfig();
+    try {
+      await interaction.deferReply();
+      const durum = interaction.options.getString('durum');
+      const guildId = interaction.guild.id;
 
-    if (!config[guildId]) config[guildId] = {};
+      let config = readJSON('./data/koruma.json');
+      if (!config[guildId]) config[guildId] = {};
+      config[guildId].capslockEngel = durum === 'ac';
+      writeJSON('./data/koruma.json', config);
 
-    config[guildId].capslockEngel = durum === 'ac';
+      const embed = new EmbedBuilder()
+        .setTitle('🔠 Capslock Koruması')
+        .setDescription(`${interaction.user} büyük harf mesaj korumasını **${durum === 'ac' ? 'AÇTI' : 'KAPATTI'}**.`)
+        .setFooter({ text: `Komut kullanan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
 
-    saveConfig(config);
-
-    const embed = new EmbedBuilder()
-      .setTitle('Büyük Harf Koruması')
-      .setDescription(`Büyük harf mesaj koruması başarıyla **${durum === 'ac' ? 'açıldı' : 'kapatıldı'}**.`)
-      .setColor(durum === 'ac' ? 'Green' : 'Red')
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+      await rpgEmbed(interaction, embed, 500);
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
+    }
   }
 };
