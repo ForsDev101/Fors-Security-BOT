@@ -57,7 +57,7 @@ const korumaAyar = {
   emojiKoruma: false,
   logKanal: null,
 };
-const spamKontrol = new Map(); // userId: {count, lastMsg, timeoutId}
+const spamKontrol = new Map();
 
 const AYAR_DOSYA = path.join(__dirname, 'korumaAyar.json');
 const CEZA_DOSYA = path.join(__dirname, 'database.json');
@@ -80,11 +80,11 @@ function cezaKaydet() {
   fs.writeFileSync(CEZA_DOSYA, JSON.stringify(cezalar, null, 2));
 }
 
-// Load saved data on start
+// Başlangıçta kayıtlı verileri yükle
 ayarYukle();
 cezaYukle();
 
-// --- HELPER FUNCTIONS ---
+// --- YARDIMCI FONKSİYONLAR ---
 function tarihFormatla(date = new Date()) {
   return date.toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
 }
@@ -102,7 +102,7 @@ function cezaEkle(userId, tur, sebep) {
   cezaKaydet();
 }
 
-// --- COMMAND REGISTER FUNCTION ---
+// --- Slash Komut Ekleme Fonksiyonu ---
 function komutEkle(name, desc, options = []) {
   const komut = new SlashCommandBuilder()
     .setName(name)
@@ -126,98 +126,7 @@ function komutEkle(name, desc, options = []) {
 
   komutlar.push(komut.toJSON());
   client.commands.set(name, { run: null });
-}
-
-// --- COMMANDS DEFINITION ---
-
-// Moderasyon Komutları
-komutEkle('ban', 'Bir kullanıcıyı sunucudan yasakla.', [
-  { name: 'kullanıcı', description: 'Yasaklanacak kullanıcı', type: 'user', required: true },
-  { name: 'sebep', description: 'Yasaklama sebebi', type: 'string', required: false },
-]);
-komutEkle('kick', 'Bir kullanıcıyı sunucudan at.', [
-  { name: 'kullanıcı', description: 'Atılacak kullanıcı', type: 'user', required: true },
-  { name: 'sebep', description: 'Sebep', type: 'string', required: false },
-]);
-komutEkle('mute', 'Kullanıcıyı süreli sustur.', [
-  { name: 'kullanıcı', description: 'Susturulacak kişi', type: 'user', required: true },
-  { name: 'süre', description: 'Dakika cinsinden süre', type: 'integer', required: true },
-]);
-komutEkle('unmute', 'Kullanıcının susturmasını kaldır.', [
-  { name: 'kullanıcı', description: 'Susturması kaldırılacak kişi', type: 'user', required: true },
-]);
-komutEkle('untimeout', 'Timeout süresini kaldırır.', [
-  { name: 'kullanıcı', description: 'Timeout kaldırılacak kişi', type: 'user', required: true },
-]);
-komutEkle('warn', 'Kullanıcıyı uyar.', [
-  { name: 'kullanıcı', description: 'Uyarılacak kişi', type: 'user', required: true },
-  { name: 'sebep', description: 'Uyarı sebebi', type: 'string', required: false },
-]);
-komutEkle('warnings', 'Uyarı geçmişini görüntüle.', [
-  { name: 'kullanıcı', description: 'Geçmişi görüntülenecek kişi', type: 'user', required: true },
-]);
-komutEkle('clear', 'Belirtilen sayıda mesaj siler.', [
-  { name: 'sayı', description: 'Silinecek mesaj sayısı (1-100)', type: 'integer', required: true },
-]);
-komutEkle('lock', 'Kanala mesaj gönderme engeli koyar.');
-komutEkle('unlock', 'Kanal kilidini kaldırır.');
-komutEkle('slowmode', 'Kanala yavaş mod ayarlar.', [
-  { name: 'saniye', description: 'Saniye cinsinden yavaş mod süresi', type: 'integer', required: true },
-]);
-
-// Koruma Komutları
-const korumaKomutlar = [
-  'koruma',
-  'antiraid',
-  'spam-engel',
-  'reklam-engel',
-  'capslock-engel',
-  'etiket-engel',
-  'rol-koruma',
-  'kanal-koruma',
-  'webhook-koruma',
-  'emoji-koruma',
-];
-for (const k of korumaKomutlar) {
-  komutEkle(k, `${k} sistemini açar veya kapatır.`, [
-    { name: 'durum', description: '"aç" veya "kapat"', type: 'string', required: true },
-  ]);
-}
-
-// Diğer Komutlar
-komutEkle('log-ayarla', 'Log kanalını ayarla.', [
-  { name: 'kanal', description: 'Log kanalı seçin', type: 'channel', required: true },
-]);
-komutEkle('cezalar', 'Kullanıcının cezalarını gösterir.', [
-  { name: 'kullanıcı', description: 'Cezaları görüntülenecek kullanıcı', type: 'user', required: true },
-]);
-komutEkle('cezaişlemler', 'Tüm ceza geçmişini listeler.');
-komutEkle('koruma-durum', 'Koruma sistemlerinin durumunu gösterir.');
-komutEkle('kayıt', 'Yeni üyeyi kayıt eder.', [
-  { name: 'kullanıcı', description: 'Kayıt edilecek kullanıcı', type: 'user', required: true },
-  { name: 'isim', description: 'İsim', type: 'string', required: true },
-  { name: 'yaş', description: 'Yaş', type: 'integer', required: true },
-]);
-komutEkle('komutlar', 'Tüm komutları sayfalı ve emojili gösterir.');
-
-// --- DEPLOY COMMANDS ---
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-(async () => {
-  try {
-    console.log('Slash komutlar deploy ediliyor...');
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: komutlar });
-    console.log('Komutlar başarıyla yüklendi!');
-  } catch (error) {
-    console.error('Komut deploy hatası:', error);
-  }
-})();
-
-// --- BOT READY ---
-client.once('ready', () => {
-  console.log(`Bot hazır! Kullanıcı: ${client.user.tag}`);
-});
-
+      }
 // Buraya kadar 1.part tamamdır.
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
