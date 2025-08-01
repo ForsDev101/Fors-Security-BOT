@@ -8,7 +8,6 @@ module.exports = {
       option.setName('miktar')
         .setDescription('Silinecek mesaj sayısı (1-100)')
         .setRequired(true)),
-  // Clear için yetki: ManageMessages
   defaultMemberPermissions: PermissionFlagsBits.ManageMessages,
 
   async execute(interaction) {
