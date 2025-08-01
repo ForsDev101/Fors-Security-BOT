@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { readJSON, writeJSON } = require('../../utils/fileHandler');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -16,27 +17,30 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.deferReply();
+    try {
+      await interaction.deferReply();
+      const durum = interaction.options.getString('durum');
+      const guildId = interaction.guild.id;
 
-    const durum = interaction.options.getString('durum');
-    const guildId = interaction.guild.id;
+      let config = readJSON('./data/koruma.json');
+      if (!config[guildId]) config[guildId] = {};
+      config[guildId].spamEngel = durum === 'ac';
+      writeJSON('./data/koruma.json', config);
 
-    let config = readJSON('./data/koruma.json');
-    if (!config[guildId]) config[guildId] = {};
+      const embed = new EmbedBuilder()
+        .setTitle('📛 Spam Koruması')
+        .setDescription(`${interaction.user} spam korumasını **${durum === 'ac' ? 'AÇTI' : 'KAPATTI'}**.`)
+        .setFooter({ text: `Komut kullanan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
 
-    config[guildId].spamEngel = durum === 'ac';
-    writeJSON('./data/koruma.json', config);
-
-    const renkler = ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Aqua', 'Orange'];
-    const rastgeleRenk = renkler[Math.floor(Math.random() * renkler.length)];
-
-    const embed = new EmbedBuilder()
-      .setTitle('📛 Spam Koruması')
-      .setDescription(`${interaction.user} spam korumasını **${durum === 'ac' ? 'AÇTI' : 'KAPATTI'}**.`)
-      .setColor(rastgeleRenk)
-      .setFooter({ text: `Komut kullanan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+      await rpgEmbed(interaction, embed, 500);
+    } catch (error) {
+      console.error(error);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
+    }
   }
 };
