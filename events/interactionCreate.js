@@ -1,19 +1,19 @@
 module.exports = {
   name: 'interactionCreate',
-  async execute(interaction) {
-    if (!interaction.isCommand()) return;
+  async execute(interaction, client) {
+    if (!interaction.isChatInputCommand()) return;
 
-    const command = interaction.client.commands.get(interaction.commandName);
+    const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
     try {
-      await command.execute(interaction);
+      await command.execute(interaction, client);
     } catch (error) {
-      console.error('Komut yürütme hatası:', error);
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      console.error(error);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: '⚠️ Komut çalıştırılırken hata oluştu.', ephemeral: true });
       } else {
-        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+        await interaction.reply({ content: '⚠️ Komut çalıştırılırken hata oluştu.', ephemeral: true });
       }
     }
   }
