@@ -1,18 +1,14 @@
 {
-  "name": "discord-moderasyon-bot",
+  "name": "koruma-moderasyon-botu",
   "version": "1.0.0",
-  "description": "Discord.js v14 ile geliştirilmiş moderasyon ve koruma botu",
+  "description": "Discord Koruma & Moderasyon Botu",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "Senin İsmin",
-  "license": "MIT",
   "dependencies": {
-    "discord.js": "^14.11.0",
-    "dotenv": "^16.3.1"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
   }
 }
