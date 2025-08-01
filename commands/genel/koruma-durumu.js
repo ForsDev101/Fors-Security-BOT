@@ -15,7 +15,7 @@ module.exports = {
       const korumaData = readJSON('./data/koruma.json')[guildId];
 
       if (!korumaData) {
-        return await interaction.editReply({ content: '⚠️ Bu sunucu için koruma ayarları bulunamadı.' });
+        return await interaction.editReply({ content: '⚠️ Bu sunucu için koruma ayarları bulunmamaktadır.' });
       }
 
       const embed = new EmbedBuilder()
