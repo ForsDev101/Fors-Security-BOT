@@ -1,48 +1,50 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-const warningsPath = path.resolve(__dirname, '../../data/warnings.json');
-
-function loadWarnings() {
-  if (!fs.existsSync(warningsPath)) return {};
-  return JSON.parse(fs.readFileSync(warningsPath));
-}
-
-function saveWarnings(warnings) {
-  fs.writeFileSync(warningsPath, JSON.stringify(warnings, null, 2));
-}
+const { readJSON, writeJSON } = require('../../utils/fileHandler');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
-    .setDescription('Bir kullanıcıyı uyarır.')
-    .addUserOption(option => option.setName('kullanıcı').setDescription('Uyarılacak kullanıcı').setRequired(true))
-    .addStringOption(option => option.setName('sebep').setDescription('Uyarı sebebi').setRequired(true))
+    .setDescription('Bir kullanıcıyı uyarır')
+    .addUserOption(option =>
+      option.setName('kullanıcı')
+        .setDescription('Uyarılacak kullanıcı')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('sebep')
+        .setDescription('Uyarı sebebi')
+        .setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers),
 
   async execute(interaction) {
-    const user = interaction.options.getUser('kullanıcı');
-    const reason = interaction.options.getString('sebep');
+    try {
+      await interaction.deferReply();
 
-    const warnings = loadWarnings();
+      const user = interaction.options.getUser('kullanıcı');
+      const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+      const guildId = interaction.guild.id;
+      let warnings = readJSON('./data/warnings.json');
 
-    if (!warnings[user.id]) warnings[user.id] = [];
+      if (!warnings[guildId]) warnings[guildId] = {};
+      if (!warnings[guildId][user.id]) warnings[guildId][user.id] = [];
 
-    warnings[user.id].push({
-      moderator: interaction.user.id,
-      reason,
-      date: new Date().toISOString(),
-    });
+      warnings[guildId][user.id].push({ reason, date: new Date().toISOString(), moderator: interaction.user.tag });
+      writeJSON('./data/warnings.json', warnings);
 
-    saveWarnings(warnings);
+      const embed = new EmbedBuilder()
+        .setTitle('⚠️ Kullanıcı Uyarıldı')
+        .setDescription(`${user} kullanıcı uyarıldı.\n**Sebep:** ${reason}`)
+        .setFooter({ text: `Uyarı veren: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
 
-    const embed = new EmbedBuilder()
-      .setColor('Yellow')
-      .setTitle('Uyarı Verildi')
-      .setDescription(`${user.tag} kullanıcısına uyarı verildi.\nSebep: ${reason}`)
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
-  },
+      await rpgEmbed(interaction, embed, 500);
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
+    }
+  }
 };
