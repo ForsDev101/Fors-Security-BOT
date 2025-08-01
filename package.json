@@ -1,13 +1,17 @@
 {
-  "name": "koruma-bot",
+  "name": "fors-security-bot",
   "version": "1.0.0",
-  "description": "Koruma ve moderasyon özelliklerine sahip Discord botu",
-  "main": "index.js",
+  "description": "Discord koruma ve moderasyon botu, RPG renkli embedlerle.",
+  "main": "src/index.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js"
   },
+  "author": "Emir Aris",
+  "license": "MIT",
   "dependencies": {
     "discord.js": "^14.11.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "chalk": "^5.3.0"
   }
 }
