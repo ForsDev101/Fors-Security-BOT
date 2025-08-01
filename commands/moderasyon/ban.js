@@ -26,7 +26,7 @@ export async function execute(interaction) {
 
   try {
     await member.ban({ reason: sebep });
-  } catch (error) {
+  } catch {
     return interaction.reply({ content: 'Banlama sırasında hata oluştu.', ephemeral: true });
   }
 
@@ -42,7 +42,6 @@ export async function execute(interaction) {
 
   await interaction.reply({ embeds: [embed] });
 
-  // Log kanalı varsa logla
   const logModID = process.env.LOG_MOD;
   if (logModID) {
     const logChannel = interaction.guild.channels.cache.get(logModID);
