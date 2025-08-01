@@ -1,38 +1,44 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('emojiekle')
-    .setDescription('URL ile emoji yükler ve sunucuya ekler')
-    .addStringOption(option => 
-      option.setName('url')
-        .setDescription('Emoji URL\'si')
-        .setRequired(true))
+    .setDescription('URL ile emoji ekler')
     .addStringOption(option =>
       option.setName('isim')
         .setDescription('Emoji ismi')
         .setRequired(true))
+    .addStringOption(option =>
+      option.setName('url')
+        .setDescription('Emoji URL\'si')
+        .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageEmojisAndStickers),
 
   async execute(interaction) {
-    const url = interaction.options.getString('url');
-    const isim = interaction.options.getString('isim');
-
-    if (!url.startsWith('http')) 
-      return interaction.reply({ content: 'Lütfen geçerli bir URL gir!', ephemeral: true });
-
     try {
+      await interaction.deferReply();
+
+      const isim = interaction.options.getString('isim');
+      const url = interaction.options.getString('url');
+
       const emoji = await interaction.guild.emojis.create({ attachment: url, name: isim });
+
       const embed = new EmbedBuilder()
-        .setTitle('Emoji Eklendi 🎉')
-        .setDescription(`Başarıyla emoji eklendi: ${emoji}`)
-        .setColor('Green')
+        .setTitle('🎭 Emoji Eklendi')
+        .setDescription(`Yeni emoji eklendi: ${emoji}`)
+        .setFooter({ text: `Ekleyen: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed] });
+      await rpgEmbed(interaction, embed, 500);
+
     } catch (error) {
       console.error(error);
-      return interaction.reply({ content: 'Emoji eklenirken hata oluştu.', ephemeral: true });
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
     }
   }
 };
