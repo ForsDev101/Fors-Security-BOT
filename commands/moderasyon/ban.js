@@ -1,50 +1,48 @@
-import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
-export const data = new SlashCommandBuilder()
-  .setName('ban')
-  .setDescription('Kullanıcıyı sunucudan yasaklar')
-  .addUserOption(option =>
-    option.setName('kullanıcı')
-      .setDescription('Banlanacak kullanıcı')
-      .setRequired(true))
-  .addStringOption(option =>
-    option.setName('sebep')
-      .setDescription('Ban sebebi')
-      .setRequired(false))
-  .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers);
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('Bir kullanıcıyı yasaklar')
+    .addUserOption(option =>
+      option.setName('kullanıcı')
+        .setDescription('Yasaklanacak kullanıcı')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('sebep')
+        .setDescription('Yasaklama sebebi')
+        .setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
-export async function execute(interaction) {
-  const user = interaction.options.getUser('kullanıcı');
-  const sebep = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+  async execute(interaction) {
+    try {
+      await interaction.deferReply();
 
-  if (!interaction.guild) return interaction.reply({ content: 'Bu komut sadece sunucularda kullanılabilir.', ephemeral: true });
+      const user = interaction.options.getUser('kullanıcı');
+      const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+      const member = await interaction.guild.members.fetch(user.id);
 
-  const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-  if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+      if (!member.bannable) {
+        return await interaction.editReply({ content: '❌ Bu kullanıcıyı banlayamam.' });
+      }
 
-  if (!member.bannable) return interaction.reply({ content: 'Bu kullanıcıyı yasaklayamam.', ephemeral: true });
+      await member.ban({ reason });
 
-  try {
-    await member.ban({ reason: sebep });
-  } catch {
-    return interaction.reply({ content: 'Banlama sırasında hata oluştu.', ephemeral: true });
+      const embed = new EmbedBuilder()
+        .setTitle('⛔ Kullanıcı Banlandı')
+        .setDescription(`${user} sunucudan banlandı.\n**Sebep:** ${reason}`)
+        .setFooter({ text: `Banlayan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+        .setTimestamp();
+
+      await rpgEmbed(interaction, embed, 500);
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
+    }
   }
-
-  const embed = new EmbedBuilder()
-    .setTitle('Bir kullanıcı yasaklandı')
-    .setColor('Red')
-    .addFields(
-      { name: 'Kullanıcı', value: `${user.tag} (${user.id})` },
-      { name: 'Yetkili', value: `${interaction.user.tag}` },
-      { name: 'Sebep', value: sebep }
-    )
-    .setTimestamp();
-
-  await interaction.reply({ embeds: [embed] });
-
-  const logModID = process.env.LOG_MOD;
-  if (logModID) {
-    const logChannel = interaction.guild.channels.cache.get(logModID);
-    if (logChannel) logChannel.send({ embeds: [embed] }).catch(() => {});
-  }
-}
+};
