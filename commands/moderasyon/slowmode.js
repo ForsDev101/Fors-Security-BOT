@@ -1,34 +1,39 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('slowmode')
-    .setDescription('Kanal için yavaş modu ayarlar (saniye cinsinden).')
+    .setDescription('Kanala yavaş mod ayarlar')
     .addIntegerOption(option =>
-      option.setName('saniye')
-        .setDescription('Yavaş mod süresi (0 ile 21600 saniye arası)')
+      option.setName('süre')
+        .setDescription('Yavaş mod süresi (saniye)')
         .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
   async execute(interaction) {
-    const seconds = interaction.options.getInteger('saniye');
-
-    if (seconds < 0 || seconds > 21600) {
-      return interaction.reply({ content: 'Lütfen 0 ile 21600 arasında bir değer girin.', ephemeral: true });
-    }
-
     try {
-      await interaction.channel.setRateLimitPerUser(seconds);
+      await interaction.deferReply();
+
+      const sure = interaction.options.getInteger('süre');
+      if (sure < 0 || sure > 21600) return await interaction.editReply('❌ Süre 0 ile 21600 saniye arasında olmalı.');
+
+      await interaction.channel.setRateLimitPerUser(sure);
+
       const embed = new EmbedBuilder()
-        .setColor('Orange')
-        .setTitle('Yavaş Mod Ayarlandı')
-        .setDescription(`${interaction.channel} kanalı için yavaş mod süresi ${seconds} saniye olarak ayarlandı.`)
+        .setTitle('🐢 Slowmode Ayarlandı')
+        .setDescription(`${interaction.channel} kanalına ${sure} saniye yavaş mod ayarlandı.`)
+        .setFooter({ text: `Ayarlayan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed] });
-    } catch (error) {
-      console.error(error);
-      interaction.reply({ content: 'Yavaş mod ayarlanırken hata oluştu.', ephemeral: true });
+      await rpgEmbed(interaction, embed, 500);
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      }
     }
   }
 };
