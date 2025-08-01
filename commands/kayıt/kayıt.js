@@ -7,48 +7,70 @@ module.exports = {
     .setDescription('Yeni gelen üyeyi isim ve yaş ile kayıt eder')
     .addUserOption(option =>
       option.setName('kullanıcı')
-        .setDescription('Kayıt edilecek kullanıcıyı seç')
+        .setDescription('Kayıt edilecek kullanıcı')
         .setRequired(true))
     .addStringOption(option =>
       option.setName('isim')
-        .setDescription('İsim')
+        .setDescription('Kullanıcının ismi')
         .setRequired(true))
     .addIntegerOption(option =>
       option.setName('yaş')
-        .setDescription('Yaş')
+        .setDescription('Kullanıcının yaşı')
         .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 
   async execute(interaction) {
+    await interaction.deferReply({ ephemeral: false }); // Hem süre aşımı olmasın hem herkese görünsün
+
     const kullanıcı = interaction.options.getUser('kullanıcı');
     const isim = interaction.options.getString('isim');
     const yaş = interaction.options.getInteger('yaş');
 
     const guild = interaction.guild;
     const member = guild.members.cache.get(kullanıcı.id);
-    if (!member) return interaction.reply({ content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+    if (!member) {
+      return interaction.editReply({ content: 'Kullanıcı sunucuda bulunamadı.' });
+    }
 
+    // Config.json'dan rol ID'lerini çek
     const config = readJSON('./data/config.json')[guild.id];
-    if (!config) return interaction.reply({ content: 'Sunucu yapılandırılmamış.', ephemeral: true });
+    if (!config) {
+      return interaction.editReply({ content: 'Sunucu ayarları yapılandırılmamış.' });
+    }
 
-    const kayıtRol = guild.roles.cache.get(config.uyeRoleId);
+    const uyeRol = guild.roles.cache.get(config.uyeRoleId);
     const kayıtsızRol = guild.roles.cache.get(config.kayıtsızRoleId);
-    if (!kayıtRol || !kayıtsızRol) return interaction.reply({ content: 'Rol ayarları eksik.', ephemeral: true });
+    if (!uyeRol || !kayıtsızRol) {
+      return interaction.editReply({ content: 'Rol ayarları eksik.' });
+    }
 
     try {
-      await member.roles.add(kayıtRol);
+      // Rol işlemleri
+      await member.roles.add(uyeRol);
       await member.roles.remove(kayıtsızRol);
+
+      // Kullanıcı adını değiştirme
       await member.setNickname(`${isim} | ${yaş}`);
 
+      // Rastgele embed rengi
+      const renkler = ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Aqua', 'Orange'];
+      const rastgeleRenk = renkler[Math.floor(Math.random() * renkler.length)];
+
+      // Embed
       const embed = new EmbedBuilder()
-        .setTitle('Kayıt Başarılı ✅')
-        .setDescription(`${kullanıcı} başarıyla kayıt edildi.\nİsim: **${isim}**\nYaş: **${yaş}**`)
-        .setColor('Green')
+        .setTitle('✅ Kayıt Başarılı')
+        .setDescription(`${member} başarıyla kayıt edildi!\n\n**İsim:** ${isim}\n**Yaş:** ${yaş}`)
+        .setColor(rastgeleRenk)
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+        .setFooter({ text: `Kayıt yapan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-      await interaction.reply({ embeds: [embed] });
-    } catch {
-      return interaction.reply({ content: 'Kayıt sırasında bir hata oluştu.', ephemeral: true });
+      // Embed yanıtı
+      await interaction.editReply({ embeds: [embed] });
+
+    } catch (error) {
+      console.error(error);
+      return interaction.editReply({ content: 'Kayıt sırasında bir hata oluştu.' });
     }
   }
 };
