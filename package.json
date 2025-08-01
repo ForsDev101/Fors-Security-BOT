@@ -1,14 +1,13 @@
 {
-  "name": "koruma-moderasyon-botu",
+  "name": "koruma-bot",
   "version": "1.0.0",
-  "description": "Discord Koruma & Moderasyon Botu",
+  "description": "Koruma ve moderasyon özelliklerine sahip Discord botu",
   "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "dotenv": "^16.4.5"
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.3.1"
   }
 }
