@@ -53,7 +53,7 @@ module.exports = {
         .setFooter({ text: `Kayıt yapan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
         .setTimestamp();
 
-      await rpgEmbed(interaction, embed, 500); // RPG renk geçişi
+      await rpgEmbed(interaction, embed, 500);
 
     } catch (error) {
       console.error(error);
