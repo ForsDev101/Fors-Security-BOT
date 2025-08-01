@@ -1,17 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-
-const configPath = path.join(__dirname, '..', '..', 'data', 'koruma.json');
-
-function loadConfig() {
-  if (!fs.existsSync(configPath)) return {};
-  return JSON.parse(fs.readFileSync(configPath));
-}
-
-function saveConfig(config) {
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-}
+const { readJSON, writeJSON } = require('../../utils/fileHandler');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -28,22 +16,26 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    const durum = interaction.options.getString('durum');
-    const guildId = interaction.guildId;
-    let config = loadConfig();
+    await interaction.deferReply({ ephemeral: false });
 
+    const durum = interaction.options.getString('durum');
+    const guildId = interaction.guild.id;
+    let config = readJSON('./data/koruma.json');
     if (!config[guildId]) config[guildId] = {};
 
     config[guildId].koruma = durum === 'ac';
+    writeJSON('./data/koruma.json', config);
 
-    saveConfig(config);
+    const renkler = ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Aqua', 'Orange'];
+    const rastgeleRenk = renkler[Math.floor(Math.random() * renkler.length)];
 
     const embed = new EmbedBuilder()
-      .setTitle('Koruma Sistemi')
-      .setDescription(`Tüm koruma sistemi başarıyla **${durum === 'ac' ? 'açıldı' : 'kapatıldı'}**.`)
-      .setColor(durum === 'ac' ? 'Green' : 'Red')
+      .setTitle('🛡️ Koruma Sistemi')
+      .setDescription(`${interaction.user} tüm koruma sistemini **${durum === 'ac' ? 'AÇTI' : 'KAPATTI'}**.`)
+      .setColor(rastgeleRenk)
+      .setFooter({ text: `Komut kullanan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
   }
 };
