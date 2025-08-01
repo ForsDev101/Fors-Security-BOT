@@ -1,93 +1,62 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-
-const komutlarSayfalari = [
-  {
-    title: '🛡️ Koruma Komutları',
-    description: `
-/koruma — Tüm koruma sistemini aç/kapat
-/antiraid — Raid korumasını aç/kapat
-/spam-engel — Spam korumasını aç/kapat
-/reklam-engel — Reklam korumasını aç/kapat
-/capslock-engel — Büyük harf mesaj korumasını aç/kapat
-/etiket-engel — @everyone, @here engelle
-/rol-koruma — Rol silme/ekleme koruması
-/kanal-koruma — Kanal silme/ekleme koruması
-/webhook-koruma — Webhook koruması
-/emoji-koruma — Emoji silme/ekleme koruması
-    `
-  },
-  {
-    title: '⚙️ Diğer Komutlar',
-    description: `
-/log-ayarla — Log kanalını ayarlar
-/kayıt — Yeni gelen kullanıcıyı kayıt eder (isim ve yaşla)
-/cezalar — Kişinin ceza geçmişini gösterir
-/cezaişlemler — Tüm ceza geçmişini listeler
-/koruma-durum — Koruma sistemlerinin aktiflik durumunu gösterir
-/emojiekle — URL ile emoji yükler
-/komutlar — Tüm komutları gösterir (bu sayfa)
-    `
-  }
-];
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { rpgEmbed } = require('../../utils/embedRPG');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('komutlar')
-    .setDescription('Sayfalı ve emojili tüm komutları gösterir'),
+    .setDescription('Tüm komutların sayfalı listesi'),
 
   async execute(interaction) {
-    let page = 0;
+    try {
+      await interaction.deferReply();
 
-    const generateEmbed = (page) => {
-      const pageData = komutlarSayfalari[page];
-      return new EmbedBuilder()
-        .setTitle(pageData.title)
-        .setDescription(pageData.description)
-        .setColor('Blue')
-        .setFooter({ text: `Sayfa ${page + 1} / ${komutlarSayfalari.length}` });
-    };
+      const pages = [
+        new EmbedBuilder()
+          .setTitle('📜 Sayfa 1 - Moderasyon Komutları')
+          .setDescription('`/ban`, `/unban`, `/mute`, `/unmute`, `/timeout`, `/untimeout`, `/warn`, `/warnings`, `/warnclear`, `/clear`, `/lock`, `/unlock`, `/slowmode`, `/unslowmode`')
+          .setTimestamp(),
 
-    const row = () => new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId('previous')
-          .setLabel('⬅️')
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(page === 0),
-        new ButtonBuilder()
-          .setCustomId('next')
-          .setLabel('➡️')
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(page === komutlarSayfalari.length - 1)
+        new EmbedBuilder()
+          .setTitle('🛡️ Sayfa 2 - Koruma Komutları')
+          .setDescription('`/koruma`, `/antiraid`, `/spam-engel`, `/reklam-engel`, `/capslock-engel`, `/etiket-engel`, `/rol-koruma`, `/kanal-koruma`, `/webhook-koruma`, `/emoji-koruma`, `/koruma-durum`')
+          .setTimestamp(),
+
+        new EmbedBuilder()
+          .setTitle('⚙️ Sayfa 3 - Diğer Komutlar')
+          .setDescription('`/komutlar`, `/emojiekle`, `/kayıt`')
+          .setTimestamp()
+      ];
+
+      let currentPage = 0;
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('prev').setLabel('⬅️ Geri').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('next').setLabel('İleri ➡️').setStyle(ButtonStyle.Secondary)
       );
 
-    const embedMessage = await interaction.reply({
-      embeds: [generateEmbed(page)],
-      components: [row()],
-      fetchReply: true
-    });
+      const message = await interaction.editReply({ embeds: [pages[currentPage]], components: [row] });
+      rpgEmbed(interaction, pages[currentPage], 500);
 
-    const collector = embedMessage.createMessageComponentCollector({
-      filter: i => i.user.id === interaction.user.id,
-      time: 60000
-    });
+      const collector = message.createMessageComponentCollector({ time: 60000 });
 
-    collector.on('collect', async i => {
-      if (i.customId === 'next' && page < komutlarSayfalari.length - 1) {
-        page++;
-      } else if (i.customId === 'previous' && page > 0) {
-        page--;
+      collector.on('collect', async (i) => {
+        if (i.user.id !== interaction.user.id) {
+          return i.reply({ content: 'Bu butonları sadece komutu kullanan kişi kullanabilir.', ephemeral: true });
+        }
+        if (i.customId === 'prev') {
+          currentPage = currentPage > 0 ? --currentPage : pages.length - 1;
+        } else if (i.customId === 'next') {
+          currentPage = currentPage + 1 < pages.length ? ++currentPage : 0;
+        }
+        await i.update({ embeds: [pages[currentPage]], components: [row] });
+        rpgEmbed(interaction, pages[currentPage], 500);
+      });
+    } catch (err) {
+      console.error(err);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: 'Komut çalıştırılırken hata oluştu.', ephemeral: true });
       }
-
-      await i.update({ embeds: [generateEmbed(page)], components: [row()] });
-    });
-
-    collector.on('end', async () => {
-      try {
-        await embedMessage.edit({ components: [] });
-      } catch (err) {
-        console.error('Mesaj düzenlenemedi:', err);
-      }
-    });
+    }
   }
 };
